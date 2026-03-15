@@ -39,4 +39,4 @@ In an era of information fatigue, **Oversite** offers a spatial perspective. Ins
 - [ ] **Language Translation:** Auto-translate local news pins into English via LLM integration.
 
 ---
-Developed by Vishwajeet and Gautam – *Connecting the dots, globally.*
+Developed by Vishwajeet Prasad and Gautam Sharma – *Connecting the dots, globally.*
