@@ -1,8 +1,12 @@
 package handler
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/VK-10/oversite/backend/helpers"
+)
 
 func HandlerReadiness(w http.ResponseWriter, r *http.Request) {
-	ResponseWithJSON(w, 200, struct{}{})
+	helpers.ResponseWithJSON(w, 200, struct{}{})
 
 }

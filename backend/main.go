@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/VK-10/oversite/backend/handler"
+	"github.com/VK-10/oversite/backend/internal/database"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
@@ -30,15 +31,18 @@ func main() {
 	if dbURL == "" {
 		log.Fatal("DB_URL is not found in the environment")
 	}
+	fmt.Println("DB_URL:", os.Getenv("DB_URL"))
 
 	conn, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Can;t connect to database:", err)
 	}
 
-	apiCfg := apiConfig{
-		DB: database.New(conn),
-	}
+	// apiCfg := apiConfig{
+	// 	DB: database.New(conn),
+	// }
+
+	apiCfg := handler.ApiConfig{DB: database.New(conn)}
 
 	fmt.Println("PORT:", port)
 
@@ -57,7 +61,7 @@ func main() {
 
 	v1Router.Get("/health", handler.HandlerReadiness)
 	v1Router.Get("/err", handler.HandleErr)
-	v1Router.Post("/users", apiCfg.handlerCreateUser)
+	v1Router.Post("/users", apiCfg.HandleCreateUser)
 
 	router.Mount("/v1", v1Router)
 
@@ -68,7 +72,7 @@ func main() {
 
 	log.Printf("Server starting on %v", srv.Addr)
 
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
