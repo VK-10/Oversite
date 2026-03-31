@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import { point } from "@turf/helpers";
+import { length, string } from "three/tsl";
 
 
 
@@ -7,6 +10,7 @@ interface GlobeThreeProps {
   style?: React.CSSProperties;
 }
 
+const countries: { id: string, name: string }[] = [];
 
 
 /* ── Atmosphere shaders ── */
@@ -56,6 +60,22 @@ function ll2v(lng, lat, r) {
     r * Math.sin(phi) * Math.sin(lam),
   );
 }
+
+// 3D point back to lang/lat
+function v2ll(point: THREE.Vector3) {
+  const lat = 90 - THREE.MathUtils.radToDeg(Math.acos(point.y / point.length()));
+  const lng = - THREE.MathUtils.radToDeg(Math.atan2(point.z , point.x));
+
+  return { lat , lng};
+}
+
+
+// check which country contains that point
+// const pt = point([lng, lat]);
+// const country = geojsonFeatures.find(f => booleanPointInPolygon(pt, f));
+// console.log(country?.properties?.name);
+
+
 
 /* ── Web Mercator meters → [lng, lat] degrees ── */
 //@ts-expect-error
@@ -123,6 +143,9 @@ function buildDots(R, n = 9000) {
 /* ── Country borders from Natural Earth TopoJSON ── */
 
 async function buildBorders(R: number) {
+
+  const mp = new Map<string, THREE.Line[]>();
+
   const g = new THREE.Group();
   try {
     const res  = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
@@ -132,14 +155,15 @@ async function buildBorders(R: number) {
     //   geo => String(geo.id) !== "356"
     // );
   
-    const indiaArcs = new Set();
+    const indiaBoundary = new Set();
     topo.objects.countries.geometries
       .filter(geo => String(geo.id) === "356")
       .forEach(geo => {
-        console.log(typeof geo)
+        // console.log(typeof geo)
         const rings = geo.arcs ?? [];
-        rings.flat(Infinity).forEach(i => indiaArcs.add(Math.abs(i)));
+        rings.flat(Infinity).forEach(i => indiaBoundary.add(Math.abs(i)));
       });
+
     const { scale, translate } = topo.transform;
 
     const mat = new THREE.LineBasicMaterial({
@@ -147,24 +171,38 @@ async function buildBorders(R: number) {
     });
 
     // Decode each TopoJSON arc → Three.js line on sphere
-    for (let i = 0; i < topo.arcs.length; i++) {
-    if (indiaArcs.has(i)) continue;   // skip India arcs
-    const arc = topo.arcs[i];
+    
+    console.log("first country:", topo.objects.countries.geometries[0]);
+    console.log(topo)
+    for (let i = 0; i < topo.objects.countries.geometries.length; i++) {
+
+    const country = topo.objects.countries.geometries[i];
+    countries.push({ id: country.id, name: country.properties.name });
+
+    if (indiaBoundary.has(i)) continue;   // skip India arcs
+    
     const pts = [];
-    let x = 0, y = 0;
-    for (const [dx, dy] of arc) {
-      x += dx; y += dy;
-      const lng = x * scale[0] + translate[0];
-      const lat = y * scale[1] + translate[1];
-      pts.push(ll2v(lng, lat, R));
+    const topoIndex = country.arcs.flat(Infinity)
+      for (const ind of topoIndex) {
+        let x = 0, y = 0;
+        const arc = topo.arcs[Math.abs(ind)];
+        for (const [dx, dy] of arc){
+        x += dx; y += dy;
+        const lng = x * scale[0] + translate[0];
+        const lat = y * scale[1] + translate[1];
+        pts.push(ll2v(lng, lat, R));
+      }
+
+    
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+      mp.set(country.properties.name, [...(mp.get(country.properties.name) ?? []), line]);
+      g.add(line);
     }
-    if (pts.length >= 2) {
-      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
-    }
-  }
-  } catch (e) {
+}
+  
+}catch (e) {
     console.warn("GeoJSON load failed:", e);
-  }
+}
   return g;
 }
 
@@ -359,6 +397,31 @@ export default function GlobeThree({ style } : GlobeThreeProps) {
     el.addEventListener("touchstart", onDown, { passive: true });
     el.addEventListener("touchend",   onUp);
     el.addEventListener("touchmove",  onMove, { passive: true });
+    el.addEventListener("click", (e) => {
+      const rect = el.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera({x, y}, camera);
+
+      const hits = raycaster.intersectObject(globeGroup);
+      if (!hits.length) return;
+
+      const point = hits[0].point; // 3d point on globe
+
+      const localPoint = point.clone().applyMatrix4(
+          globeGroup.matrixWorld.clone().invert()
+      );
+
+      const {lng,lat} = v2ll(localPoint)
+
+      console.log(lng,lat)
+
+
+
+
+    })
 
     const onResize = () => {
       camera.aspect = el.clientWidth / el.clientHeight;
@@ -409,12 +472,11 @@ export default function GlobeThree({ style } : GlobeThreeProps) {
     <div
       ref={mountRef}
       style={{
-        position: "absolute", right: "-6%", top: "50%",
-        transform: "translateY(-50%)",
-        width: "min(700px, 78vw)", height: "min(700px, 78vw)",
-        cursor: "grab",
-        ...style,
-      }}
+  position: "absolute", inset: 0,
+  width: "100%", height: "100%",
+  cursor: "grab",
+  ...style,
+}}
     />
   );
 }
