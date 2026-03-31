@@ -2,16 +2,13 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point } from "@turf/helpers";
-import { length, string } from "three/tsl";
 
 
 
 interface GlobeThreeProps {
   style?: React.CSSProperties;
+  onCountrySelect?: (name: string | null) => void;
 }
-
-const countries: { id: string, name: string }[] = [];
-
 
 /* ── Atmosphere shaders ── */
 const ATMO_VERT = `
@@ -50,8 +47,7 @@ void main() {
 }`;
 
 /* ── lng/lat → Vec3 ── */
-//@ts-expect-error
-function ll2v(lng, lat, r) {
+function ll2v(lng: number, lat: number, r: number): THREE.Vector3 {
   const phi = THREE.MathUtils.degToRad(90 - lat);
   const lam = THREE.MathUtils.degToRad(-lng);
   return new THREE.Vector3(
@@ -61,37 +57,62 @@ function ll2v(lng, lat, r) {
   );
 }
 
-// 3D point back to lang/lat
-function v2ll(point: THREE.Vector3) {
-  const lat = 90 - THREE.MathUtils.radToDeg(Math.acos(point.y / point.length()));
-  const lng = - THREE.MathUtils.radToDeg(Math.atan2(point.z , point.x));
-
-  return { lat , lng};
+/* ── Vec3 → { lng, lat } ── */
+function v2ll(v: THREE.Vector3): { lat: number; lng: number } {
+  const lat = 90 - THREE.MathUtils.radToDeg(Math.acos(v.y / v.length()));
+  const lng = -THREE.MathUtils.radToDeg(Math.atan2(v.z, v.x));
+  return { lat, lng };
 }
 
-
-// check which country contains that point
-// const pt = point([lng, lat]);
-// const country = geojsonFeatures.find(f => booleanPointInPolygon(pt, f));
-// console.log(country?.properties?.name);
-
-
-
-/* ── Web Mercator meters → [lng, lat] degrees ── */
-//@ts-expect-error
-function metersToLngLat(mx, my) {
+/* ── Web Mercator metres → [lng, lat] ── */
+function metersToLngLat(mx: number, my: number): [number, number] {
   const lng = (mx / 20037508.34) * 180;
   const lat = (Math.atan(Math.exp((my / 20037508.34) * Math.PI)) / Math.PI) * 360 - 90;
   return [lng, lat];
 }
 
+/* ─────────────────────────────────────────────
+   Materials
+   All world-atlas border materials use NotEqualStencilFunc (ref=1).
+   They skip any screen pixel where the India stencil mask has written 1.
+───────────────────────────────────────────── */
+function makeBorderMat(color: number, opacity: number): THREE.LineBasicMaterial {
+  return new THREE.LineBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    stencilWrite: false,
+    stencilFunc:  THREE.NotEqualStencilFunc,
+    stencilRef:   1,
+  });
+}
+const DEFAULT_MAT  = makeBorderMat(0x00ff88, 0.85);
+const SELECTED_MAT = makeBorderMat(0xffffff, 1.0);
+const DIM_MAT      = makeBorderMat(0x00ff88, 0.25);
+
+/*
+  India stencil material.
+  Writes stencil ref=1 over every screen pixel that India's mesh covers.
+  No colour output, no depth interaction, DoubleSide so winding order is irrelevant.
+*/
+const INDIA_STENCIL_MAT = new THREE.MeshBasicMaterial({
+  colorWrite:   false,
+  depthTest:    false,  // write stencil regardless of depth
+  depthWrite:   false,
+  side:         THREE.DoubleSide,
+  stencilWrite: true,
+  stencilFunc:  THREE.AlwaysStencilFunc,
+  stencilRef:   1,
+  stencilZPass: THREE.ReplaceStencilOp,
+  stencilFail:  THREE.ReplaceStencilOp,
+  stencilZFail: THREE.ReplaceStencilOp,
+});
+
 /* ── Grid lines ── */
-//@ts-expect-error
-function buildGrid(R) {
+function buildGrid(R: number): THREE.Group {
   const g   = new THREE.Group();
   const dim = new THREE.LineBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.07 });
   const eq  = new THREE.LineBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.20 });
-
   for (let lat = -80; lat <= 80; lat += 20) {
     const phi = THREE.MathUtils.degToRad(lat);
     const pts = [];
@@ -113,12 +134,8 @@ function buildGrid(R) {
   return g;
 }
 
-
-
-
 /* ── Fibonacci dot cloud ── */
-//@ts-expect-error
-function buildDots(R, n = 9000) {
+function buildDots(R: number, n = 9000): THREE.Points {
   const pos = new Float32Array(n * 3);
   const vis = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -141,106 +158,187 @@ function buildDots(R, n = 9000) {
 }
 
 /* ── Country borders from Natural Earth TopoJSON ── */
+interface BorderResult {
+  group:    THREE.Group;
+  lineMap:  Map<string, THREE.Line[]>;
+  features: GeoJSON.Feature[];
+}
 
-async function buildBorders(R: number) {
+async function buildBorders(R: number): Promise<BorderResult> {
+  const group   = new THREE.Group();
+  const lineMap = new Map<string, THREE.Line[]>();
+  const features: GeoJSON.Feature[] = [];
 
-  const mp = new Map<string, THREE.Line[]>();
-
-  const g = new THREE.Group();
   try {
     const res  = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
     const topo = await res.json();
-    // India's numeric ISO code is 356
-    // topo.objects.countries.geometries = topo.objects.countries.geometries.filter(
-    //   geo => String(geo.id) !== "356"
-    // );
-  
-    const indiaBoundary = new Set();
-    topo.objects.countries.geometries
-      .filter(geo => String(geo.id) === "356")
-      .forEach(geo => {
-        // console.log(typeof geo)
-        const rings = geo.arcs ?? [];
-        rings.flat(Infinity).forEach(i => indiaBoundary.add(Math.abs(i)));
-      });
-
     const { scale, translate } = topo.transform;
 
-    const mat = new THREE.LineBasicMaterial({
-      color: 0x00ff88, transparent: true, opacity: 0.85,
-    });
-
-    // Decode each TopoJSON arc → Three.js line on sphere
-    
-    console.log("first country:", topo.objects.countries.geometries[0]);
-    console.log(topo)
-    for (let i = 0; i < topo.objects.countries.geometries.length; i++) {
-
-    const country = topo.objects.countries.geometries[i];
-    countries.push({ id: country.id, name: country.properties.name });
-
-    if (indiaBoundary.has(i)) continue;   // skip India arcs
-    
-    const pts = [];
-    const topoIndex = country.arcs.flat(Infinity)
-      for (const ind of topoIndex) {
-        let x = 0, y = 0;
-        const arc = topo.arcs[Math.abs(ind)];
-        for (const [dx, dy] of arc){
+    function decodeArc(arcIdx: number): [number, number][] {
+      const reversed = arcIdx < 0;
+      const raw      = topo.arcs[reversed ? ~arcIdx : arcIdx];
+      let x = 0, y = 0;
+      const coords: [number, number][] = raw.map(([dx, dy]: [number, number]) => {
         x += dx; y += dy;
-        const lng = x * scale[0] + translate[0];
-        const lat = y * scale[1] + translate[1];
-        pts.push(ll2v(lng, lat, R));
+        return [x * scale[0] + translate[0], y * scale[1] + translate[1]] as [number, number];
+      });
+      return reversed ? coords.reverse() : coords;
+    }
+
+    function decodeRing(ring: number[]): [number, number][] {
+      const coords: [number, number][] = [];
+      for (const idx of ring) {
+        const arc = decodeArc(idx);
+        if (coords.length > 0) arc.shift();
+        coords.push(...arc);
+      }
+      return coords;
+    }
+
+    for (const country of topo.objects.countries.geometries) {
+      const name: string = country.properties?.name ?? String(country.id);
+
+      // India: skip rendering (handled by buildIndiaBorders) but keep GeoJSON for hit-testing
+      if (String(country.id) === "356") {
+        const geometry = country.type === "Polygon"
+          ? { type: "Polygon"      as const, coordinates: (country.arcs as number[][])  .map((r: number[])    => decodeRing(r)) }
+          : { type: "MultiPolygon" as const, coordinates: (country.arcs as number[][][]).map((p: number[][]) => p.map((r: number[]) => decodeRing(r))) };
+        features.push({ type: "Feature", properties: { name }, geometry });
+        continue;
       }
 
-    
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
-      mp.set(country.properties.name, [...(mp.get(country.properties.name) ?? []), line]);
-      g.add(line);
+      const lines: THREE.Line[] = [];
+
+      if (country.type === "Polygon") {
+        const polygonRings: [number, number][][] = [];
+        for (const ring of country.arcs as number[][]) {
+          const coords = decodeRing(ring);
+          polygonRings.push(coords);
+          const pts = coords.map(([lng, lat]) => ll2v(lng, lat, R));
+          if (pts.length >= 2) {
+            const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), DEFAULT_MAT);
+            lines.push(line);
+            group.add(line);
+          }
+        }
+        features.push({ type: "Feature", properties: { name },
+          geometry: { type: "Polygon", coordinates: polygonRings } });
+
+      } else if (country.type === "MultiPolygon") {
+        const multi: [number, number][][][] = [];
+        for (const polygon of country.arcs as number[][][]) {
+          const rings: [number, number][][] = [];
+          for (const ring of polygon) {
+            const coords = decodeRing(ring);
+            rings.push(coords);
+            const pts = coords.map(([lng, lat]) => ll2v(lng, lat, R));
+            if (pts.length >= 2) {
+              const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), DEFAULT_MAT);
+              lines.push(line);
+              group.add(line);
+            }
+          }
+          multi.push(rings);
+        }
+        features.push({ type: "Feature", properties: { name },
+          geometry: { type: "MultiPolygon", coordinates: multi } });
+      }
+
+      if (lines.length) lineMap.set(name, lines);
     }
-}
-  
-}catch (e) {
+  } catch (e) {
     console.warn("GeoJSON load failed:", e);
-}
-  return g;
+  }
+
+  return { group, lineMap, features };
 }
 
-/*India Borders*/
-//@ts-expect-error
-async function buildIndiaBorders(R) {
-  const g = new THREE.Group();
+/* ─────────────────────────────────────────────
+   India stencil mask
+   Reads the high-detail India boundary file (same one used for the orange
+   border) and builds an invisible mesh covering India's claimed territory.
+   renderOrder = -1 ensures it runs before all border lines (order 0),
+   writing stencil=1 so those lines skip India's pixels entirely.
+───────────────────────────────────────────── */
+async function buildIndiaMask(R: number): Promise<THREE.Mesh | null> {
   try {
-    const res = await fetch("/India_Country_Boundary_topojson.json")
+    const res  = await fetch("/India_Country_Boundary_topojson.json");
     const topo = await res.json();
-    console.log("transform:", topo.transform);
-console.log("first arc first point:", topo.arcs[0][0]);
-    const { scale, translate } = topo.transform ?? {
-      scale: [1,1],
-      translate: [0,0],
-    }
+    const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
 
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xff9933,
-      transparent: true,
-      opacity: 1.0,
-      linewidth: 2,
-    });
-
+    const pts3d: THREE.Vector3[] = [];
     for (const arc of topo.arcs) {
-      const pts = [];
       let x = 0, y = 0;
       for (const [dx, dy] of arc) {
         x += dx; y += dy;
-        const mx = (x * scale[0])+ translate[0];
-        const my = (y * scale[1])+ translate[1];
-        const [lng, lat] = metersToLngLat(mx,my);
+        const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
+        pts3d.push(ll2v(lng, lat, R));
+      }
+    }
+    if (pts3d.length < 3) return null;
+
+    /*
+      Fan triangulation from the spherical centroid of all boundary points.
+      India's outline is roughly convex so this gives complete interior coverage.
+      DoubleSide + depthTest:false means winding order and depth never block writes.
+    */
+    const centroid = new THREE.Vector3();
+    pts3d.forEach(p => centroid.add(p.clone().normalize()));
+    centroid.normalize().multiplyScalar(R * 0.999);
+
+    const positions = new Float32Array((pts3d.length + 1) * 3);
+    positions[0] = centroid.x;
+    positions[1] = centroid.y;
+    positions[2] = centroid.z;
+    pts3d.forEach((p, i) => {
+      positions[(i + 1) * 3]     = p.x;
+      positions[(i + 1) * 3 + 1] = p.y;
+      positions[(i + 1) * 3 + 2] = p.z;
+    });
+
+    const indices: number[] = [];
+    for (let i = 1; i <= pts3d.length; i++) {
+      indices.push(0, i, i < pts3d.length ? i + 1 : 1);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+
+    const mesh = new THREE.Mesh(geo, INDIA_STENCIL_MAT);
+    mesh.renderOrder = -1; // before all border lines
+    return mesh;
+  } catch (e) {
+    console.warn("India mask not loaded:", e);
+    return null;
+  }
+}
+
+/* ── India borders (high-detail, Web Mercator, no stencil restriction) ── */
+async function buildIndiaBorders(R: number): Promise<THREE.Group> {
+  const g = new THREE.Group();
+  try {
+    const res  = await fetch("/India_Country_Boundary_topojson.json");
+    const topo = await res.json();
+    const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
+
+    // No stencilFunc set → always renders, appears on top of stencil mask
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xff9933, transparent: true, opacity: 1.0, linewidth: 2,
+    });
+
+    for (const arc of topo.arcs) {
+      const pts: THREE.Vector3[] = [];
+      let x = 0, y = 0;
+      for (const [dx, dy] of arc) {
+        x += dx; y += dy;
+        const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
         pts.push(ll2v(lng, lat, R));
       }
       if (pts.length >= 2) {
-        g.add(new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints(pts), mat
-        ));
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+        line.renderOrder = 1; // after world-atlas borders
+        g.add(line);
       }
     }
   } catch (e) {
@@ -249,53 +347,8 @@ console.log("first arc first point:", topo.arcs[0][0]);
   return g;
 }
 
-/* Orbit ring  */
-function makeOrbit(scene, orbitR, tiltX, tiltZ, hexColor, speed) {
-  const grp = new THREE.Group();
-  grp.rotation.x = THREE.MathUtils.degToRad(tiltX);
-  grp.rotation.z = THREE.MathUtils.degToRad(tiltZ);
-
-  // Ring
-  const pts = Array.from({ length: 257 }, (_, i) => {
-    const a = (i / 256) * Math.PI * 2;
-    return new THREE.Vector3(Math.cos(a) * orbitR, Math.sin(a) * orbitR, 0);
-  });
-  const rMat = new THREE.LineDashedMaterial({
-    color: hexColor, transparent: true, opacity: 0.28,
-    dashSize: 0.16, gapSize: 0.10,
-  });
-  const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), rMat);
-  ring.computeLineDistances();
-  grp.add(ring);
-
-  // Dot + sprite glow
-  const dot  = new THREE.Mesh(
-    new THREE.SphereGeometry(0.024, 8, 8),
-    new THREE.MeshBasicMaterial({ color: hexColor }),
-  );
-  const cv   = document.createElement("canvas");
-  cv.width = cv.height = 64;
-  const cx2  = cv.getContext("2d");
-  const grd  = cx2.createRadialGradient(32, 32, 0, 32, 32, 32);
-  const c    = new THREE.Color(hexColor);
-  grd.addColorStop(0, `rgba(${Math.round(c.r*255)},${Math.round(c.g*255)},${Math.round(c.b*255)},1)`);
-  grd.addColorStop(1, "rgba(0,0,0,0)");
-  cx2.fillStyle = grd; cx2.fillRect(0, 0, 64, 64);
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(cv),
-    blending: THREE.AdditiveBlending, transparent: true, opacity: 0.9,
-  }));
-  sp.scale.setScalar(0.30);
-  dot.add(sp);
-  grp.add(dot);
-  scene.add(grp);
-
-  return { grp, dot, orbitR, speed };
-}
-
-
 /* ── Starfield ── */
-function makeStars(n = 2500) {
+function makeStars(n = 2500): THREE.Points {
   const pos = new Float32Array(n * 3).map(() => (Math.random() - 0.5) * 90);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
@@ -308,120 +361,170 @@ function makeStars(n = 2500) {
 /* ─────────────────────────────────────────────
    Main component
 ───────────────────────────────────────────── */
+/* ... (Keep all your imports and shader constants exactly the same) ... */
 
-export default function GlobeThree({ style } : GlobeThreeProps) {
+export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) {
   const mountRef = useRef<HTMLDivElement>(null);
+
+  const lineMapRef  = useRef<Map<string, THREE.Line[]>>(new Map());
+  const featuresRef = useRef<GeoJSON.Feature[]>([]);
+  const selectedRef = useRef<string | null>(null);
 
   useEffect(() => {
     const el = mountRef.current;
     if (!el) return;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(el.clientWidth, el.clientHeight);
     renderer.setClearColor(0x000000, 0);
+    renderer.autoClearStencil = true;
     el.appendChild(renderer.domElement);
 
     const scene  = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, el.clientWidth / el.clientHeight, 0.1, 200);
+    
+    // Starting position
     camera.position.z = 2.7;
 
     const R = 1.0;
-
-    // Globe group
     const globeGroup = new THREE.Group();
     scene.add(globeGroup);
 
-    // Dark sphere core (occludes back-face lines)
+    /* ... (Keep Globe setup: buildGrid, buildDots, buildBorders, buildIndiaMask, buildIndiaBorders, makeStars, mkAtmo) ... */
+    // Note: I'm omitting the repetitive geometry/material logic for brevity, 
+    // ensure you keep your existing build calls here.
+    
     globeGroup.add(new THREE.Mesh(
       new THREE.SphereGeometry(R * 0.998, 64, 64),
       new THREE.MeshBasicMaterial({ color: 0x010e07, transparent: true, opacity: 0.96 }),
     ));
-
-    // Grid
     globeGroup.add(buildGrid(R));
-
-    // Dot cloud
     globeGroup.add(buildDots(R * 1.001));
-
-    // Country lines (async)
-    buildBorders(R * 1.003).then(b => globeGroup.add(b));
-    // India Borders (async)
+    buildBorders(R * 1.003).then(({ group, lineMap, features }) => {
+      globeGroup.add(group);
+      lineMapRef.current = lineMap;
+      featuresRef.current = features;
+    });
+    buildIndiaMask(R * 1.003).then(mask => { if (mask) globeGroup.add(mask); });
     buildIndiaBorders(R * 1.004).then(b => globeGroup.add(b));
 
-    // Atmosphere layers
-    const mkAtmo = (r, col, coeff, power, side = THREE.BackSide) => {
+    const mkAtmo = (r: number, col: number, coeff: number, power: number, side: THREE.Side = THREE.BackSide) => {
       const m = new THREE.ShaderMaterial({
         vertexShader: ATMO_VERT, fragmentShader: ATMO_FRAG,
-        side, blending: THREE.AdditiveBlending,
-        transparent: true, depthWrite: false,
-        uniforms: { glowColor: { value: new THREE.Color(col) }, coeff: { value: coeff }, power: { value: power } },
+        side, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+        uniforms: {
+          glowColor: { value: new THREE.Color(col) },
+          coeff:     { value: coeff },
+          power:     { value: power },
+        },
       });
       scene.add(new THREE.Mesh(new THREE.SphereGeometry(r, 64, 64), m));
     };
-    mkAtmo(R * 1.22, 0x00ccff, 0.55, 4.2);   // outer blue
-    mkAtmo(R * 1.06, 0x00ff88, 0.40, 6.0);   // inner green
-
-    // Stars
+    mkAtmo(R * 1.22, 0x00ccff, 0.55, 4.2);
+    mkAtmo(R * 1.06, 0x00ff88, 0.40, 6.0);
     scene.add(makeStars());
 
-    const orbits = [
-      // makeOrbit(scene, 1.48,  23,   0,  0x00ff88, 0.55), //green
-      // makeOrbit(scene, 1.62, -55,  35, 0x4db8ff, -0.32),// blue
-      // makeOrbit(scene, 1.38,  70, -15, 0xffad00,  0.20), //yellow
-    ];
-  
-
-    // scene.add(new THREE.AmbientLight(0x112211, 1));
-
-    // Interaction
-    let drag = false, auto = true;
+    /* ── Interaction Logic ── */
+    let drag    = false;
+    let auto    = true;
+    let didDrag = false;
     const vel = { x: 0, y: 0 };
-    let pm = { x: 0, y: 0 };
-    const xy = e => ({ x: e.clientX ?? e.touches?.[0]?.clientX ?? 0, y: e.clientY ?? e.touches?.[0]?.clientY ?? 0 });
+    let pm    = { x: 0, y: 0 };
 
-    const onDown = e => { drag = true; auto = false; pm = xy(e); vel.x = vel.y = 0; };
-    const onUp   = () => { drag = false; setTimeout(() => { auto = true; }, 3000); };
-    const onMove = e => {
+    const xy = (e: MouseEvent | TouchEvent) => ({
+      x: (e as MouseEvent).clientX ?? (e as TouchEvent).touches?.[0]?.clientX ?? 0,
+      y: (e as MouseEvent).clientY ?? (e as TouchEvent).touches?.[0]?.clientY ?? 0,
+    });
+
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      drag = true; auto = false; didDrag = false;
+      pm = xy(e); vel.x = vel.y = 0;
+    };
+
+    const onUp = () => {
+      if (!drag) return;
+      drag = false;
+      setTimeout(() => { if (!drag) auto = true; }, 3000);
+    };
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
       if (!drag) return;
       const p = xy(e);
-      vel.y = (p.x - pm.x) * 0.006;
-      vel.x = (p.y - pm.y) * 0.006;
+      const dx = p.x - pm.x, dy = p.y - pm.y;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag = true;
+      vel.y = dx * 0.006;
+      vel.x = dy * 0.006;
       pm = p;
     };
 
-    el.addEventListener("mousedown",  onDown);
-    el.addEventListener("mouseup",    onUp);
-    el.addEventListener("mouseleave", onUp);
-    el.addEventListener("mousemove",  onMove);
-    el.addEventListener("touchstart", onDown, { passive: true });
-    el.addEventListener("touchend",   onUp);
-    el.addEventListener("touchmove",  onMove, { passive: true });
-    el.addEventListener("click", (e) => {
-      const rect = el.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    /* ── ZOOM LOGIC ── */
+    const onWheel = (e: WheelEvent) => {
+      // Prevent the page from scrolling while zooming the globe
+      e.preventDefault();
 
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera({x, y}, camera);
+      const zoomSpeed = 0.0015;
+      const minDistance = 1.5;
+      const maxDistance = 6.0;
 
-      const hits = raycaster.intersectObject(globeGroup);
-      if (!hits.length) return;
+      // Adjust camera Z position
+      camera.position.z += e.deltaY * zoomSpeed;
 
-      const point = hits[0].point; // 3d point on globe
+      // Clamp the zoom distance
+      camera.position.z = Math.max(minDistance, Math.min(maxDistance, camera.position.z));
+      
+      // Stop auto-rotation when user interacts via zoom
+      auto = false;
+      setTimeout(() => { if (!drag) auto = true; }, 3000);
+    };
 
-      const localPoint = point.clone().applyMatrix4(
-          globeGroup.matrixWorld.clone().invert()
-      );
+    const onClick = (e: MouseEvent) => {
+        /* ... keep your existing onClick code ... */
+        if (didDrag) return;
+        const rect = el.getBoundingClientRect();
+        const x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+        const y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera({ x, y }, camera);
+        const hitSphere = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 64));
+        globeGroup.add(hitSphere);
+        const hits = raycaster.intersectObject(hitSphere);
+        globeGroup.remove(hitSphere);
+        if (!hits.length) { selectedRef.current = null; onCountrySelect?.(null); return; }
+        const localPt = hits[0].point.clone().applyMatrix4(globeGroup.matrixWorld.clone().invert());
+        const { lng, lat } = v2ll(localPt);
+        const pt = point([lng, lat]);
+        const found = featuresRef.current.find(f => {
+            try { return booleanPointInPolygon(pt, f as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>); }
+            catch { return false; }
+        });
+        // (Assuming you have highlightCountry defined like in your original code)
+        const name = (found?.properties?.name as string) ?? null;
+        const prev = selectedRef.current;
+        const lmap = lineMapRef.current;
+        if (prev) lmap.forEach(lines => lines.forEach(l => { l.material = DEFAULT_MAT; }));
+        if (!name || name === prev) {
+            selectedRef.current = null;
+            onCountrySelect?.(null);
+        } else {
+            lmap.forEach((lines, key) => lines.forEach(l => { l.material = key === name ? SELECTED_MAT : DIM_MAT; }));
+            selectedRef.current = name;
+            onCountrySelect?.(name);
+        }
+    };
 
-      const {lng,lat} = v2ll(localPoint)
+    // Listeners
+    el.addEventListener("mousedown",  onDown as EventListener);
+    el.addEventListener("mousemove",  onMove as EventListener);
+    el.addEventListener("touchstart", onDown as EventListener, { passive: true });
+    el.addEventListener("touchmove",  onMove as EventListener, { passive: true });
+    el.addEventListener("click",      onClick);
+    
+    // Wheel event for zoom (non-passive to allow e.preventDefault)
+    el.addEventListener("wheel",      onWheel as EventListener, { passive: false });
 
-      console.log(lng,lat)
-
-
-
-
-    })
+    window.addEventListener("mouseup",  onUp);
+    window.addEventListener("touchend", onUp);
 
     const onResize = () => {
       camera.aspect = el.clientWidth / el.clientHeight;
@@ -430,7 +533,7 @@ export default function GlobeThree({ style } : GlobeThreeProps) {
     };
     window.addEventListener("resize", onResize);
 
-    let t = 0, animId;
+    let t = 0, animId: number;
     const loop = () => {
       animId = requestAnimationFrame(loop);
       t += 0.012;
@@ -439,15 +542,9 @@ export default function GlobeThree({ style } : GlobeThreeProps) {
         globeGroup.rotation.y += 0.003;
       } else {
         globeGroup.rotation.y += vel.y;
-        globeGroup.rotation.x = Math.max(-Math.PI / 2.2,
-          Math.min(Math.PI / 2.2, globeGroup.rotation.x + vel.x));
+        globeGroup.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, globeGroup.rotation.x + vel.x));
         vel.x *= 0.88; vel.y *= 0.88;
       }
-
-      orbits.forEach(({ dot, orbitR, speed }) => {
-        const a = t * speed;
-        dot.position.set(Math.cos(a) * orbitR, Math.sin(a) * orbitR, 0);
-      });
 
       renderer.render(scene, camera);
     };
@@ -455,14 +552,15 @@ export default function GlobeThree({ style } : GlobeThreeProps) {
 
     return () => {
       cancelAnimationFrame(animId);
-      window.removeEventListener("resize", onResize);
-      el.removeEventListener("mousedown",  onDown);
-      el.removeEventListener("mouseup",    onUp);
-      el.removeEventListener("mouseleave", onUp);
-      el.removeEventListener("mousemove",  onMove);
-      el.removeEventListener("touchstart", onDown);
-      el.removeEventListener("touchend",   onUp);
-      el.removeEventListener("touchmove",  onMove);
+      window.removeEventListener("mouseup",  onUp);
+      window.removeEventListener("touchend", onUp);
+      window.removeEventListener("resize",   onResize);
+      el.removeEventListener("mousedown",  onDown as EventListener);
+      el.removeEventListener("mousemove",  onMove as EventListener);
+      el.removeEventListener("touchstart", onDown as EventListener);
+      el.removeEventListener("touchmove",  onMove as EventListener);
+      el.removeEventListener("click",      onClick);
+      el.removeEventListener("wheel",      onWheel as EventListener);
       renderer.dispose();
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement);
     };
@@ -472,11 +570,11 @@ export default function GlobeThree({ style } : GlobeThreeProps) {
     <div
       ref={mountRef}
       style={{
-  position: "absolute", inset: 0,
-  width: "100%", height: "100%",
-  cursor: "grab",
-  ...style,
-}}
+        position: "absolute", inset: 0,
+        width: "100%", height: "100%",
+        cursor: "grab",
+        ...style,
+      }}
     />
   );
 }
