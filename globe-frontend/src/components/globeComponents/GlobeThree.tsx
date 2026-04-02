@@ -78,7 +78,7 @@ function makeBorderMat(color: number, opacity: number): THREE.LineBasicMaterial 
     opacity,
     stencilWrite: false,
     stencilFunc:  THREE.NotEqualStencilFunc,
-    stencilRef:   1,
+    stencilRef:   1
   });
 }
 const DEFAULT_MAT  = makeBorderMat(0x00ff88, 0.85);
@@ -155,13 +155,6 @@ async function buildBorders(R: number): Promise<BorderResult> {
 
   for (const feature of geoFeatures) {
     const name: string = feature.properties?.name || String(feature.id);
-    
-    // 1. Skip rendering the base India (we use the high-res overlay)
-    // but keep it in the features list for hit-testing/clicking.
-    // if (name === "India" || feature.id === "IN") {
-    //   features.push(feature);
-    //   continue;
-    // }
 
     const lines: THREE.Line[] = [];
     const geometry = feature.geometry;
@@ -197,100 +190,6 @@ async function buildBorders(R: number): Promise<BorderResult> {
   return { group, lineMap, features };
 }
 
-/* ─────────────────────────────────────────────
-   India stencil mask
-   Reads the high-detail India boundary file (same one used for the orange
-   border) and builds an invisible mesh covering India's claimed territory.
-   renderOrder = -1 ensures it runs before all border lines (order 0),
-   writing stencil=1 so those lines skip India's pixels entirely.
-───────────────────────────────────────────── */
-// async function buildIndiaMask(R: number): Promise<THREE.Mesh | null> {
-//   try {
-//     const res  = await fetch("/India_Country_Boundary_topojson.json");
-//     const topo = await res.json();
-//     const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
-
-//     const pts3d: THREE.Vector3[] = [];
-//     for (const arc of topo.arcs) {
-//       let x = 0, y = 0;
-//       for (const [dx, dy] of arc) {
-//         x += dx; y += dy;
-//         const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
-//         pts3d.push(ll2v(lng, lat, R));
-//       }
-//     }
-//     if (pts3d.length < 3) return null;
-
-//     /*
-//       Fan triangulation from the spherical centroid of all boundary points.
-//       India's outline is roughly convex so this gives complete interior coverage.
-//       DoubleSide + depthTest:false means winding order and depth never block writes.
-//     */
-//     const centroid = new THREE.Vector3();
-//     pts3d.forEach(p => centroid.add(p.clone().normalize()));
-//     centroid.normalize().multiplyScalar(R * 0.999);
-
-//     const positions = new Float32Array((pts3d.length + 1) * 3);
-//     positions[0] = centroid.x;
-//     positions[1] = centroid.y;
-//     positions[2] = centroid.z;
-//     pts3d.forEach((p, i) => {
-//       positions[(i + 1) * 3]     = p.x;
-//       positions[(i + 1) * 3 + 1] = p.y;
-//       positions[(i + 1) * 3 + 2] = p.z;
-//     });
-
-//     const indices: number[] = [];
-//     for (let i = 1; i <= pts3d.length; i++) {
-//       indices.push(0, i, i < pts3d.length ? i + 1 : 1);
-//     }
-
-//     const geo = new THREE.BufferGeometry();
-//     geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-//     geo.setIndex(indices);
-
-//     const mesh = new THREE.Mesh(geo, INDIA_STENCIL_MAT);
-//     mesh.renderOrder = -1; // before all border lines
-//     return mesh;
-//   } catch (e) {
-//     console.warn("India mask not loaded:", e);
-//     return null;
-//   }
-// }
-
-/* ── India borders (high-detail, Web Mercator, no stencil restriction) ── */
-// async function buildIndiaBorders(R: number): Promise<THREE.Group> {
-//   const g = new THREE.Group();
-//   try {
-//     const res  = await fetch("/India_Country_Boundary_topojson.json");
-//     const topo = await res.json();
-//     const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
-
-//     // No stencilFunc set → always renders, appears on top of stencil mask
-//     const mat = new THREE.LineBasicMaterial({
-//       color: 0xff9933, transparent: true, opacity: 1.0, linewidth: 2,
-//     });
-
-//     for (const arc of topo.arcs) {
-//       const pts: THREE.Vector3[] = [];
-//       let x = 0, y = 0;
-//       for (const [dx, dy] of arc) {
-//         x += dx; y += dy;
-//         const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
-//         pts.push(ll2v(lng, lat, R));
-//       }
-//       if (pts.length >= 2) {
-//         const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
-//         line.renderOrder = 1; // after world-atlas borders
-//         g.add(line);
-//       }
-//     }
-//   } catch (e) {
-//     console.warn("India borders not loaded:", e);
-//   }
-//   return g;
-// }
-
 /* ── Starfield ── */
 function makeStars(n = 2500): THREE.Points {
   const pos = new Float32Array(n * 3).map(() => (Math.random() - 0.5) * 90);
@@ -305,7 +204,6 @@ function makeStars(n = 2500): THREE.Points {
 /* ─────────────────────────────────────────────
    Main component
 ───────────────────────────────────────────── */
-/* ... (Keep all your imports and shader constants exactly the same) ... */
 
 export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -334,14 +232,10 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
     const R = 1.0;
     const globeGroup = new THREE.Group();
     scene.add(globeGroup);
-
-    /* ... (Keep Globe setup: buildGrid, buildDots, buildBorders, buildIndiaMask, buildIndiaBorders, makeStars, mkAtmo) ... */
-    // Note: I'm omitting the repetitive geometry/material logic for brevity, 
-    // ensure you keep your existing build calls here.
     
     globeGroup.add(new THREE.Mesh(
       new THREE.SphereGeometry(R * 0.998, 64, 64),
-      new THREE.MeshBasicMaterial({ color: 0x010e07, transparent: true, opacity: 0.96 }),
+      new THREE.MeshBasicMaterial({ color: 0x010e07}),
     ));
     globeGroup.add(buildGrid(R));
     globeGroup.add(buildDots(R * 1.001));
@@ -350,8 +244,6 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
       lineMapRef.current = lineMap;
       featuresRef.current = features;
     });
-    //buildIndiaMask(R * 1.003).then(mask => { if (mask) globeGroup.add(mask); });
-    //buildIndiaBorders(R * 1.004).then(b => globeGroup.add(b));
 
     const mkAtmo = (r: number, col: number, coeff: number, power: number, side: THREE.Side = THREE.BackSide) => {
       const m = new THREE.ShaderMaterial({
