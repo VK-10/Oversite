@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point } from "@turf/helpers";
+import worldIndiaUltra from "@amcharts/amcharts4-geodata/worldIndiaUltra";
 
 
 
@@ -64,12 +65,6 @@ function v2ll(v: THREE.Vector3): { lat: number; lng: number } {
   return { lat, lng };
 }
 
-/* ── Web Mercator metres → [lng, lat] ── */
-function metersToLngLat(mx: number, my: number): [number, number] {
-  const lng = (mx / 20037508.34) * 180;
-  const lat = (Math.atan(Math.exp((my / 20037508.34) * Math.PI)) / Math.PI) * 360 - 90;
-  return [lng, lat];
-}
 
 /* ─────────────────────────────────────────────
    Materials
@@ -89,24 +84,6 @@ function makeBorderMat(color: number, opacity: number): THREE.LineBasicMaterial 
 const DEFAULT_MAT  = makeBorderMat(0x00ff88, 0.85);
 const SELECTED_MAT = makeBorderMat(0xffffff, 1.0);
 const DIM_MAT      = makeBorderMat(0x00ff88, 0.25);
-
-/*
-  India stencil material.
-  Writes stencil ref=1 over every screen pixel that India's mesh covers.
-  No colour output, no depth interaction, DoubleSide so winding order is irrelevant.
-*/
-const INDIA_STENCIL_MAT = new THREE.MeshBasicMaterial({
-  colorWrite:   false,
-  depthTest:    false,  // write stencil regardless of depth
-  depthWrite:   false,
-  side:         THREE.DoubleSide,
-  stencilWrite: true,
-  stencilFunc:  THREE.AlwaysStencilFunc,
-  stencilRef:   1,
-  stencilZPass: THREE.ReplaceStencilOp,
-  stencilFail:  THREE.ReplaceStencilOp,
-  stencilZFail: THREE.ReplaceStencilOp,
-});
 
 /* ── Grid lines ── */
 function buildGrid(R: number): THREE.Group {
@@ -165,91 +142,58 @@ interface BorderResult {
 }
 
 async function buildBorders(R: number): Promise<BorderResult> {
-  const group   = new THREE.Group();
+  const group = new THREE.Group();
   const lineMap = new Map<string, THREE.Line[]>();
   const features: GeoJSON.Feature[] = [];
 
-  try {
-    const res  = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
-    const topo = await res.json();
-    const { scale, translate } = topo.transform;
+  // amCharts4-geodata exports standard GeoJSON
+  // We cast to 'any' briefly to handle internal property access safely
+  const data = worldIndiaUltra as any;
 
-    function decodeArc(arcIdx: number): [number, number][] {
-      const reversed = arcIdx < 0;
-      const raw      = topo.arcs[reversed ? ~arcIdx : arcIdx];
-      let x = 0, y = 0;
-      const coords: [number, number][] = raw.map(([dx, dy]: [number, number]) => {
-        x += dx; y += dy;
-        return [x * scale[0] + translate[0], y * scale[1] + translate[1]] as [number, number];
+  // GeoJSON uses a 'features' array
+  const geoFeatures = data.features || [];
+
+  for (const feature of geoFeatures) {
+    const name: string = feature.properties?.name || String(feature.id);
+    
+    // 1. Skip rendering the base India (we use the high-res overlay)
+    // but keep it in the features list for hit-testing/clicking.
+    // if (name === "India" || feature.id === "IN") {
+    //   features.push(feature);
+    //   continue;
+    // }
+
+    const lines: THREE.Line[] = [];
+    const geometry = feature.geometry;
+
+    if (!geometry) continue;
+
+    // 2. Handle Polygons and MultiPolygons
+    const coords = geometry.type === "Polygon" 
+      ? [geometry.coordinates] 
+      : geometry.coordinates;
+
+    (coords as number[][][][]).forEach((polygon) => {
+      polygon.forEach((ring) => {
+        const pts = ring.map(([lng, lat]) => ll2v(lng, lat, R));
+        if (pts.length >= 2) {
+          const line = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(pts),
+            DEFAULT_MAT
+          );
+          lines.push(line);
+          group.add(line);
+        }
       });
-      return reversed ? coords.reverse() : coords;
+    });
+
+    if (lines.length) {
+      lineMap.set(name, lines);
     }
-
-    function decodeRing(ring: number[]): [number, number][] {
-      const coords: [number, number][] = [];
-      for (const idx of ring) {
-        const arc = decodeArc(idx);
-        if (coords.length > 0) arc.shift();
-        coords.push(...arc);
-      }
-      return coords;
-    }
-
-    for (const country of topo.objects.countries.geometries) {
-      const name: string = country.properties?.name ?? String(country.id);
-
-      // India: skip rendering (handled by buildIndiaBorders) but keep GeoJSON for hit-testing
-      if (String(country.id) === "356") {
-        const geometry = country.type === "Polygon"
-          ? { type: "Polygon"      as const, coordinates: (country.arcs as number[][])  .map((r: number[])    => decodeRing(r)) }
-          : { type: "MultiPolygon" as const, coordinates: (country.arcs as number[][][]).map((p: number[][]) => p.map((r: number[]) => decodeRing(r))) };
-        features.push({ type: "Feature", properties: { name }, geometry });
-        continue;
-      }
-
-      const lines: THREE.Line[] = [];
-
-      if (country.type === "Polygon") {
-        const polygonRings: [number, number][][] = [];
-        for (const ring of country.arcs as number[][]) {
-          const coords = decodeRing(ring);
-          polygonRings.push(coords);
-          const pts = coords.map(([lng, lat]) => ll2v(lng, lat, R));
-          if (pts.length >= 2) {
-            const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), DEFAULT_MAT);
-            lines.push(line);
-            group.add(line);
-          }
-        }
-        features.push({ type: "Feature", properties: { name },
-          geometry: { type: "Polygon", coordinates: polygonRings } });
-
-      } else if (country.type === "MultiPolygon") {
-        const multi: [number, number][][][] = [];
-        for (const polygon of country.arcs as number[][][]) {
-          const rings: [number, number][][] = [];
-          for (const ring of polygon) {
-            const coords = decodeRing(ring);
-            rings.push(coords);
-            const pts = coords.map(([lng, lat]) => ll2v(lng, lat, R));
-            if (pts.length >= 2) {
-              const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), DEFAULT_MAT);
-              lines.push(line);
-              group.add(line);
-            }
-          }
-          multi.push(rings);
-        }
-        features.push({ type: "Feature", properties: { name },
-          geometry: { type: "MultiPolygon", coordinates: multi } });
-      }
-
-      if (lines.length) lineMap.set(name, lines);
-    }
-  } catch (e) {
-    console.warn("GeoJSON load failed:", e);
+    features.push(feature);
   }
 
+  // Final return ensures the "must return a value" error is resolved
   return { group, lineMap, features };
 }
 
@@ -260,92 +204,92 @@ async function buildBorders(R: number): Promise<BorderResult> {
    renderOrder = -1 ensures it runs before all border lines (order 0),
    writing stencil=1 so those lines skip India's pixels entirely.
 ───────────────────────────────────────────── */
-async function buildIndiaMask(R: number): Promise<THREE.Mesh | null> {
-  try {
-    const res  = await fetch("/India_Country_Boundary_topojson.json");
-    const topo = await res.json();
-    const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
+// async function buildIndiaMask(R: number): Promise<THREE.Mesh | null> {
+//   try {
+//     const res  = await fetch("/India_Country_Boundary_topojson.json");
+//     const topo = await res.json();
+//     const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
 
-    const pts3d: THREE.Vector3[] = [];
-    for (const arc of topo.arcs) {
-      let x = 0, y = 0;
-      for (const [dx, dy] of arc) {
-        x += dx; y += dy;
-        const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
-        pts3d.push(ll2v(lng, lat, R));
-      }
-    }
-    if (pts3d.length < 3) return null;
+//     const pts3d: THREE.Vector3[] = [];
+//     for (const arc of topo.arcs) {
+//       let x = 0, y = 0;
+//       for (const [dx, dy] of arc) {
+//         x += dx; y += dy;
+//         const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
+//         pts3d.push(ll2v(lng, lat, R));
+//       }
+//     }
+//     if (pts3d.length < 3) return null;
 
-    /*
-      Fan triangulation from the spherical centroid of all boundary points.
-      India's outline is roughly convex so this gives complete interior coverage.
-      DoubleSide + depthTest:false means winding order and depth never block writes.
-    */
-    const centroid = new THREE.Vector3();
-    pts3d.forEach(p => centroid.add(p.clone().normalize()));
-    centroid.normalize().multiplyScalar(R * 0.999);
+//     /*
+//       Fan triangulation from the spherical centroid of all boundary points.
+//       India's outline is roughly convex so this gives complete interior coverage.
+//       DoubleSide + depthTest:false means winding order and depth never block writes.
+//     */
+//     const centroid = new THREE.Vector3();
+//     pts3d.forEach(p => centroid.add(p.clone().normalize()));
+//     centroid.normalize().multiplyScalar(R * 0.999);
 
-    const positions = new Float32Array((pts3d.length + 1) * 3);
-    positions[0] = centroid.x;
-    positions[1] = centroid.y;
-    positions[2] = centroid.z;
-    pts3d.forEach((p, i) => {
-      positions[(i + 1) * 3]     = p.x;
-      positions[(i + 1) * 3 + 1] = p.y;
-      positions[(i + 1) * 3 + 2] = p.z;
-    });
+//     const positions = new Float32Array((pts3d.length + 1) * 3);
+//     positions[0] = centroid.x;
+//     positions[1] = centroid.y;
+//     positions[2] = centroid.z;
+//     pts3d.forEach((p, i) => {
+//       positions[(i + 1) * 3]     = p.x;
+//       positions[(i + 1) * 3 + 1] = p.y;
+//       positions[(i + 1) * 3 + 2] = p.z;
+//     });
 
-    const indices: number[] = [];
-    for (let i = 1; i <= pts3d.length; i++) {
-      indices.push(0, i, i < pts3d.length ? i + 1 : 1);
-    }
+//     const indices: number[] = [];
+//     for (let i = 1; i <= pts3d.length; i++) {
+//       indices.push(0, i, i < pts3d.length ? i + 1 : 1);
+//     }
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geo.setIndex(indices);
+//     const geo = new THREE.BufferGeometry();
+//     geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+//     geo.setIndex(indices);
 
-    const mesh = new THREE.Mesh(geo, INDIA_STENCIL_MAT);
-    mesh.renderOrder = -1; // before all border lines
-    return mesh;
-  } catch (e) {
-    console.warn("India mask not loaded:", e);
-    return null;
-  }
-}
+//     const mesh = new THREE.Mesh(geo, INDIA_STENCIL_MAT);
+//     mesh.renderOrder = -1; // before all border lines
+//     return mesh;
+//   } catch (e) {
+//     console.warn("India mask not loaded:", e);
+//     return null;
+//   }
+// }
 
 /* ── India borders (high-detail, Web Mercator, no stencil restriction) ── */
-async function buildIndiaBorders(R: number): Promise<THREE.Group> {
-  const g = new THREE.Group();
-  try {
-    const res  = await fetch("/India_Country_Boundary_topojson.json");
-    const topo = await res.json();
-    const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
+// async function buildIndiaBorders(R: number): Promise<THREE.Group> {
+//   const g = new THREE.Group();
+//   try {
+//     const res  = await fetch("/India_Country_Boundary_topojson.json");
+//     const topo = await res.json();
+//     const { scale, translate } = topo.transform ?? { scale: [1, 1], translate: [0, 0] };
 
-    // No stencilFunc set → always renders, appears on top of stencil mask
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xff9933, transparent: true, opacity: 1.0, linewidth: 2,
-    });
+//     // No stencilFunc set → always renders, appears on top of stencil mask
+//     const mat = new THREE.LineBasicMaterial({
+//       color: 0xff9933, transparent: true, opacity: 1.0, linewidth: 2,
+//     });
 
-    for (const arc of topo.arcs) {
-      const pts: THREE.Vector3[] = [];
-      let x = 0, y = 0;
-      for (const [dx, dy] of arc) {
-        x += dx; y += dy;
-        const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
-        pts.push(ll2v(lng, lat, R));
-      }
-      if (pts.length >= 2) {
-        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
-        line.renderOrder = 1; // after world-atlas borders
-        g.add(line);
-      }
-    }
-  } catch (e) {
-    console.warn("India borders not loaded:", e);
-  }
-  return g;
-}
+//     for (const arc of topo.arcs) {
+//       const pts: THREE.Vector3[] = [];
+//       let x = 0, y = 0;
+//       for (const [dx, dy] of arc) {
+//         x += dx; y += dy;
+//         const [lng, lat] = metersToLngLat(x * scale[0] + translate[0], y * scale[1] + translate[1]);
+//         pts.push(ll2v(lng, lat, R));
+//       }
+//       if (pts.length >= 2) {
+//         const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+//         line.renderOrder = 1; // after world-atlas borders
+//         g.add(line);
+//       }
+//     }
+//   } catch (e) {
+//     console.warn("India borders not loaded:", e);
+//   }
+//   return g;
+// }
 
 /* ── Starfield ── */
 function makeStars(n = 2500): THREE.Points {
@@ -406,8 +350,8 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
       lineMapRef.current = lineMap;
       featuresRef.current = features;
     });
-    buildIndiaMask(R * 1.003).then(mask => { if (mask) globeGroup.add(mask); });
-    buildIndiaBorders(R * 1.004).then(b => globeGroup.add(b));
+    //buildIndiaMask(R * 1.003).then(mask => { if (mask) globeGroup.add(mask); });
+    //buildIndiaBorders(R * 1.004).then(b => globeGroup.add(b));
 
     const mkAtmo = (r: number, col: number, coeff: number, power: number, side: THREE.Side = THREE.BackSide) => {
       const m = new THREE.ShaderMaterial({
@@ -485,7 +429,7 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
         const x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
         const y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
         const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera({ x, y }, camera);
+        raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
         const hitSphere = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 64));
         globeGroup.add(hitSphere);
         const hits = raycaster.intersectObject(hitSphere);
@@ -500,6 +444,7 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
         });
         // (Assuming you have highlightCountry defined like in your original code)
         const name = (found?.properties?.name as string) ?? null;
+        console.log(name)
         const prev = selectedRef.current;
         const lmap = lineMapRef.current;
         if (prev) lmap.forEach(lines => lines.forEach(l => { l.material = DEFAULT_MAT; }));
@@ -539,7 +484,7 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
       t += 0.012;
 
       if (auto) {
-        globeGroup.rotation.y += 0.003;
+        globeGroup.rotation.y += 0.001;
       } else {
         globeGroup.rotation.y += vel.y;
         globeGroup.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, globeGroup.rotation.x + vel.x));
