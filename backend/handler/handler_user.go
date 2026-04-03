@@ -34,6 +34,10 @@ func (apiCfg *ApiConfig) HandleCreateUser(w http.ResponseWriter, r *http.Request
 		helpers.RespondWithError(w, 400, fmt.Sprintf("Couldnt create user:%s", err))
 		return
 	}
-	helpers.ResponseWithJSON(w, 200, models.DatabaseUserToUser(user))
+	helpers.ResponseWithJSON(w, 201, models.DatabaseUserToUser(user))
 
+}
+
+func (apiCfg *ApiConfig) HandlerGetUser(w http.ResponseWriter, r *http.Request, user database.User) {
+	helpers.ResponseWithJSON(w, 200, models.DatabaseUserToUser(user))
 }
