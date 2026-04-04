@@ -42,7 +42,10 @@ func main() {
 	// 	DB: database.New(conn),
 	// }
 
-	apiCfg := handler.ApiConfig{DB: database.New(conn)}
+	db := database.New(conn)
+	apiCfg := handler.ApiConfig{DB: db}
+
+	// go startScraping(db, 10, time.Minute)
 
 	fmt.Println("PORT:", port)
 
@@ -70,6 +73,8 @@ func main() {
 	v1Router.Post("/feed_follows", apiCfg.MiddlewareAuth(apiCfg.HandlerCreateFeedFollow))
 	v1Router.Get("/feed_follows", apiCfg.MiddlewareAuth(apiCfg.HandlerGetFeedFollow))
 	v1Router.Delete("/feed_follows/{feedFollowID}", apiCfg.MiddlewareAuth(apiCfg.HandlerDeleteFeedFollow))
+
+	v1Router.Get("/user_post", apiCfg.MiddlewareAuth(apiCfg.HandlerGetPostsForUser))
 
 	router.Mount("/v1", v1Router)
 

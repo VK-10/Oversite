@@ -41,3 +41,16 @@ func (apiCfg *ApiConfig) HandleCreateUser(w http.ResponseWriter, r *http.Request
 func (apiCfg *ApiConfig) HandlerGetUser(w http.ResponseWriter, r *http.Request, user database.User) {
 	helpers.ResponseWithJSON(w, 200, models.DatabaseUserToUser(user))
 }
+
+func (apiCfg *ApiConfig) HandlerGetPostsForUser(w http.ResponseWriter, r *http.Request, user database.User) {
+	posts, err := apiCfg.DB.GetPostsForUser(r.Context(), database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit:  10,
+	})
+	if err != nil {
+		helpers.RespondWithError(w, 400, fmt.Sprintf("Couldnt get posts: %v", err))
+		return
+	}
+
+	helpers.ResponseWithJSON(w, 200, models.DatabasePostsToDatabaseposts(posts))
+}
