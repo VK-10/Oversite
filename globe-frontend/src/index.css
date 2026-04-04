@@ -51,7 +51,8 @@
 }
 
 #root {
-  width: 1126px;
+  height: 100svh;
+  width: 100%;
   max-width: 100%;
   margin: 0 auto;
   text-align: center;
@@ -63,7 +64,9 @@
 }
 
 body {
+  height: 100%;
   margin: 0;
+  padding: 0;
 }
 
 h1,
