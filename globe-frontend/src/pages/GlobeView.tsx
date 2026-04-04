@@ -14,8 +14,8 @@
  */
 
 import { useState, useCallback } from "react";
-import GlobeThree   from "./GlobeThree";
-import CountryPanel from "./CountryPanel";
+import GlobeThree   from "../components/GlobeThree";
+import CountryPanel from "../components/CountryPanel";
 
 /* Strip spaces and non-alphanumeric chars for clean URL slugs.
    "United States of America" → "UnitedStatesofAmerica"          */

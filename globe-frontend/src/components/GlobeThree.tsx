@@ -335,6 +335,7 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
             catch { return false; }
         });
         // (Assuming you have highlightCountry defined like in your original code)
+
         const name = (found?.properties?.name as string) ?? null;
         console.log(name)
         const prev = selectedRef.current;
@@ -369,7 +370,7 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
       const height = el.clientHeight;
 
       camera.aspect = width / height;
-      camera.updateProjectionMatrix();
+      camera.updateProjectionMatrix(); // handling the translated coordinates of globe
       renderer.setSize(width, height);
       
       // FIX: Force an immediate render so the canvas is never empty 
