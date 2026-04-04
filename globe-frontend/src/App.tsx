@@ -1,6 +1,6 @@
 
 import './App.css'
-import GlobeThree from './components/globeComponents/GlobeThree'
+import GlobeView from './components/globeComponents/GlobeView'
 
 function App() {
   
@@ -8,7 +8,7 @@ function App() {
 
   return (
     <>
-      <GlobeThree />
+      <GlobeView />
       
     </>
   )

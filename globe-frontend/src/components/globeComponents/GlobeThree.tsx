@@ -313,7 +313,7 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
       auto = false;
       setTimeout(() => { if (!drag) auto = true; }, 3000);
     };
-
+    
     const onClick = (e: MouseEvent) => {
         /* ... keep your existing onClick code ... */
         if (didDrag) return;
@@ -364,11 +364,20 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
     window.addEventListener("touchend", onUp);
 
     const onResize = () => {
-      camera.aspect = el.clientWidth / el.clientHeight;
+      if (!el) return;
+      const width = el.clientWidth;
+      const height = el.clientHeight;
+
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      renderer.setSize(el.clientWidth, el.clientHeight);
+      renderer.setSize(width, height);
+      
+      // FIX: Force an immediate render so the canvas is never empty 
+      // between the "clear" and the next animation loop frame.
+      renderer.render(scene, camera); 
     };
-    window.addEventListener("resize", onResize);
+    const resizeObserver = new ResizeObserver(() => onResize());
+    resizeObserver.observe(el);
 
     let t = 0, animId: number;
     const loop = () => {
