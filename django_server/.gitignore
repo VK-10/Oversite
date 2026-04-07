@@ -1,0 +1,127 @@
+# =========================
+
+# Python
+
+# =========================
+
+**pycache**/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# =========================
+
+# Virtual Environment
+
+# =========================
+
+venv/
+.env/
+.env.*
+
+# =========================
+
+# Django
+
+# =========================
+
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# =========================
+
+# Environment Variables
+
+# =========================
+
+.env
+.env.local
+.env.development
+.env.production
+
+# =========================
+
+# IDE / Editor
+
+# =========================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =========================
+
+# OS Files
+
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+
+# Testing / Coverage
+
+# =========================
+
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+pytest_cache/
+
+# =========================
+
+# Migrations (optional)
+
+# =========================
+
+# Uncomment ONLY if you know what you're doing
+
+# */migrations/*
+
+# !*/migrations/**init**.py
+
+# =========================
+
+# Node (if you mix frontend here)
+
+# =========================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+
+# Docker
+
+# =========================
+
+*.pid
+*.seed
+*.pid.lock
