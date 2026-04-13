@@ -52,5 +52,5 @@ func (apiCfg *ApiConfig) HandlerGetPostsForUser(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	helpers.ResponseWithJSON(w, 200, models.DatabasePostsToDatabaseposts(posts))
+	helpers.ResponseWithJSON(w, 200, models.DatabasePostsToDatabasePosts(posts))
 }

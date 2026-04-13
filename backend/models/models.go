@@ -86,16 +86,17 @@ type Post struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	Title       string    `json:"title"`
-	Description *string   `json:"description"` // it will marshal to null value
+	Description string    `json:"description"` // it will marshal to null value
 	PublishedAt time.Time `json:"published_at"`
 	Url         string    `json:"url"`
 	FeedID      uuid.UUID `json:"feed_id"`
 }
 
 func DatabasePostToPost(dbPost database.Post) Post {
-	var description *string
+	description := ""
+
 	if dbPost.Description.Valid {
-		description = &dbPost.Description.String
+		description = dbPost.Description.String
 	}
 	return Post{
 		ID:          dbPost.ID,
@@ -109,8 +110,8 @@ func DatabasePostToPost(dbPost database.Post) Post {
 	}
 }
 
-func DatabasePostsToDatabaseposts(dbPosts []database.Post) []Post {
-	posts := []Post{}
+func DatabasePostsToDatabasePosts(dbPosts []database.Post) []Post {
+	posts := make([]Post, 0, len(dbPosts))
 	for _, post := range dbPosts {
 		posts = append(posts, DatabasePostToPost(post))
 	}
