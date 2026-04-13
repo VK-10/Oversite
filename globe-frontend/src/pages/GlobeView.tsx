@@ -15,7 +15,7 @@
 
 import { useState, useCallback } from "react";
 import GlobeThree   from "../components/GlobeThree";
-import CountryPanel from "../components/CountryPanel";
+import Panel from "../components/Panel";
 
 /* Strip spaces and non-alphanumeric chars for clean URL slugs.
    "United States of America" → "UnitedStatesofAmerica"          */
@@ -52,10 +52,10 @@ export default function GlobeView() {
       }}
     >
       {/* Panel mounts/unmounts based on selection.
-          CountryPanel handles its own slide-in/out transition internally
+          Panel handles its own slide-in/out transition internally
           and calls onClose once the slide-out animation finishes.         */}
       {selectedCountry && (
-        <CountryPanel
+        <Panel
           country={selectedCountry}
           onClose={handlePanelClose}
         />
