@@ -1,10 +1,5 @@
 /**
  * src/components/CountryPanel/types.ts
- *
- * Props and local state types owned by CountryPanel.
- * Keeping these in a separate file lets you import them into
- * tests, Storybook stories, or parent components without pulling
- * in the full React component tree.
  */
 
 export interface CountryPanelProps {
@@ -13,6 +8,15 @@ export interface CountryPanelProps {
    * e.g. "United States of America", "Germany", "India".
    */
   country: string;
+
+  /**
+   * When the parent flips this to true (e.g. user clicks ocean / deselects
+   * via the globe), CountryPanel starts its slide-out animation and calls
+   * onClose when the transition finishes.
+   * The X button uses its own internal close path — this prop is purely
+   * for external triggers that don't go through the button.
+   */
+  triggerClose?: boolean;
 
   /** Called once the slide-out animation finishes so the parent can unmount. */
   onClose: () => void;

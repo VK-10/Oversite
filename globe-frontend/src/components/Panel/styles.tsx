@@ -1,19 +1,18 @@
 /**
  * src/components/CountryPanel/styles.ts
  *
- * All inline React.CSSProperties for CountryPanel live here.
- * Separating them out keeps the component file focused on logic
- * and makes visual tweaks easy to find.
- *
- * Naming convention: camelCase keys matching JSX style prop names.
+ * Note: s.inner.width is intentionally NOT set here.
+ * The component sets it to the PANEL_WIDTH constant ("min(400px, 92vw)")
+ * at runtime so both the outer wrapper and the inner div always use the
+ * same value — keeping them in sync via a single source of truth.
  */
 
 import type React from "react";
 
 const s: Record<string, React.CSSProperties> = {
-  /* ── Outer sliding wrapper (animated via GlobeView) ─────────────── */
+  /* ── Fixed-width inner (clipped by the animated outer) ──────────── */
   inner: {
-    width: "100%",
+    // width is set dynamically in index.tsx to match PANEL_WIDTH
     height: "100%",
     display: "flex",
     flexDirection: "column",
@@ -29,7 +28,7 @@ const s: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "12px",
-    padding: "28px 20px 20px",
+    // padding is set dynamically in index.tsx based on isMobile
   },
   accent: {
     width: "3px",
@@ -47,7 +46,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   title: {
     margin: 0,
-    fontSize: "17px",
+    // fontSize set dynamically in index.tsx
     fontWeight: 600,
     color: "#dffff0",
     letterSpacing: "0.03em",
@@ -57,7 +56,6 @@ const s: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap",
   },
   closeBtn: {
-    flexShrink: 0,
     background: "transparent",
     border: "1px solid #00ff8830",
     borderRadius: "6px",
@@ -67,6 +65,7 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     padding: "8px",
+    // minWidth / minHeight set dynamically in index.tsx for mobile tap target
   },
 
   /* ── Divider ─────────────────────────────────────────────────────── */
@@ -74,13 +73,14 @@ const s: Record<string, React.CSSProperties> = {
     height: "1px",
     margin: "0 20px",
     background: "linear-gradient(to right, #00ff8830, transparent)",
+    flexShrink: 0,
   },
 
   /* ── Scrollable body ─────────────────────────────────────────────── */
   body: {
     flex: 1,
     overflowY: "auto",
-    padding: "20px",
+    // padding set dynamically in index.tsx based on isMobile
     display: "flex",
     flexDirection: "column",
     gap: "12px",
@@ -88,7 +88,7 @@ const s: Record<string, React.CSSProperties> = {
     scrollbarColor: "#00ff8825 transparent",
   },
 
-  /* ── Section header label ────────────────────────────────────────── */
+  /* ── Section label ───────────────────────────────────────────────── */
   sectionLabel: {
     fontSize: "8px",
     letterSpacing: "0.2em",
@@ -96,7 +96,7 @@ const s: Record<string, React.CSSProperties> = {
     marginBottom: "8px",
   },
 
-  /* ── Loading / error / empty feedback ───────────────────────────── */
+  /* ── Feedback text (loading, error, empty) ───────────────────────── */
   feedbackText: {
     margin: 0,
     fontSize: "12px",
@@ -105,7 +105,7 @@ const s: Record<string, React.CSSProperties> = {
     fontStyle: "italic",
   },
 
-  /* ── Individual news card ────────────────────────────────────────── */
+  /* ── News card ───────────────────────────────────────────────────── */
   newsCard: {
     display: "flex",
     flexDirection: "column",
@@ -123,7 +123,7 @@ const s: Record<string, React.CSSProperties> = {
     borderColor: "#00ff8840",
   },
 
-  /* ── Headline text ───────────────────────────────────────────────── */
+  /* ── Headline ────────────────────────────────────────────────────── */
   newsTitle: {
     margin: 0,
     fontSize: "12px",
