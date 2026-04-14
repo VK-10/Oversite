@@ -1,5 +1,3 @@
-
-import React from 'react';
 import { BrowserRouter as Routes, Route } from 'react-router-dom';
 import './App.css'
 import GlobeView from './pages/GlobeView'

@@ -1,44 +1,82 @@
 /**
- * GlobeView.tsx
+ * src/pages/GlobeView.tsx
  *
- * Drop this wherever you currently render <GlobeThree />.
- * No router setup needed — it manages panel state internally
- * and uses window.history.pushState for URL sync.
+ * Orchestrates GlobeThree + Panel.
  *
- * URL behaviour:
- *   - Click "United States of America" → URL becomes /UnitedStatesofAmerica
- *   - Close panel / click globe background → URL returns to /
- *   - Works with or without React Router in the project.
- *   - If you DO use React Router, just swap the pushState calls
- *     for navigate() — the state logic is identical.
+ * Close animation contract:
+ *
+ *   X button path  (already worked):
+ *     Panel.handleClose() → setOpen(false) → animation
+ *       → setTimeout(onClose, 350) → handlePanelClose() → setSelectedCountry(null)
+ *
+ *   Ocean click path (was broken — fixed here):
+ *     onCountrySelect(null) → setClosingPanel(true) — selectedCountry stays set,
+ *     Panel stays mounted, triggerClose prop flips true
+ *       → Panel animates out → calls onClose
+ *         → handlePanelClose() → setSelectedCountry(null) + setClosingPanel(false)
+ *
+ * URL strategy — query param under the existing /globe route:
+ *   /globe?country=UnitedStatesofAmerica
+ *   Reloads still match <Route path="/globe">, restoring the open panel.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import GlobeThree   from "../components/GlobeThree";
 import Panel from "../components/Panel";
 
-/* Strip spaces and non-alphanumeric chars for clean URL slugs.
-   "United States of America" → "UnitedStatesofAmerica"          */
 function toSlug(name: string): string {
   return name.replace(/\s+/g, "").replace(/[^a-zA-Z0-9]/g, "");
 }
 
+function readSlugFromUrl(): string | null {
+  const param = new URLSearchParams(window.location.search).get("country");
+  return param ? decodeURIComponent(param) : null;
+}
+
 export default function GlobeView() {
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(
+    readSlugFromUrl
+  );
+  /**
+   * When true, Panel is still mounted (so it can animate) but its
+   * triggerClose prop is set — it will call onClose after the slide-out
+   * finishes, at which point we finally unmount it.
+   */
+  const [closingPanel, setClosingPanel] = useState(false);
 
   const handleCountrySelect = useCallback((name: string | null) => {
     if (name) {
+      // New country selected — cancel any in-progress close, show new panel
+      setClosingPanel(false);
       setSelectedCountry(name);
-      window.history.pushState({ country: name }, "", `/${toSlug(name)}`);
+      window.history.pushState(
+        { country: name },
+        "",
+        `/globe?country=${toSlug(name)}`
+      );
     } else {
-      setSelectedCountry(null);
-      window.history.pushState({}, "", "/");
+      // Deselected (ocean click) — trigger animated close, keep mounted for now
+      setClosingPanel(true);
+      window.history.pushState({}, "", "/globe");
     }
   }, []);
 
+  /** Called by Panel after its slide-out animation completes */
   const handlePanelClose = useCallback(() => {
     setSelectedCountry(null);
-    window.history.pushState({}, "", "/");
+    setClosingPanel(false);
+    window.history.pushState({}, "", "/globe");
+  }, []);
+
+  // Sync with browser back/forward
+  useEffect(() => {
+    const onPopState = (e: PopStateEvent) => {
+      const country = (e.state as { country?: string })?.country ?? null;
+      setSelectedCountry(country);
+      setClosingPanel(false);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   return (
@@ -51,20 +89,19 @@ export default function GlobeView() {
         overflow: "hidden",
       }}
     >
-      {/* Panel mounts/unmounts based on selection.
-          Panel handles its own slide-in/out transition internally
-          and calls onClose once the slide-out animation finishes.         */}
       {selectedCountry && (
         <Panel
           country={selectedCountry}
+          triggerClose={closingPanel}
           onClose={handlePanelClose}
         />
       )}
 
-      {/* Globe fills the remaining space. The flex layout naturally
-          shrinks it when the panel slides in.                       */}
       <div style={{ position: "relative", flex: 1, minWidth: 0, height: "100%" }}>
-        <GlobeThree onCountrySelect={handleCountrySelect} />
+        <GlobeThree
+            onCountrySelect={handleCountrySelect}
+            selectedCountry={selectedCountry}
+          />
       </div>
     </div>
   );

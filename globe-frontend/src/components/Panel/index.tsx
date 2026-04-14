@@ -1,12 +1,5 @@
 /**
  * src/components/Panel/index.tsx
- *
- * Sliding side-panel that displays live news for the selected country.
- *
- * Data flow:
- *   GlobeThree → onCountrySelect(name) → GlobeView (state) → CountryPanel (prop)
- *   CountryPanel → fetchCountryNews(name) → Django /api/news/<slug>/
- *   Django JSON array → NewsArticle[] → rendered news cards
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -15,7 +8,15 @@ import { fetchCountryNews } from "../../services/newsService";
 import type { CountryPanelProps } from "./types";
 import s from "./styles";
 
-/* ── Helpers ──────────────────────────────────────────────────────────── */
+/* ─── Constants ──────────────────────────────────────────────────────── */
+
+/** Must match the open-width in the outer wrapper below AND s.inner.width */
+const PANEL_WIDTH = "min(400px, 92vw)";
+
+/** Matches the CSS transition duration in ms */
+const SLIDE_DURATION = 350;
+
+/* ─── Helpers ────────────────────────────────────────────────────────── */
 
 function formatDate(d: Date): string {
   return d.toLocaleString("en-GB", {
@@ -27,7 +28,21 @@ function formatDate(d: Date): string {
   });
 }
 
-/* ── Sub-components ───────────────────────────────────────────────────── */
+/**
+ * Returns true when the viewport is narrower than 480 px.
+ * Updates on resize so the panel reflows without a page reload.
+ */
+function useIsMobile(): boolean {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 480);
+  useEffect(() => {
+    const handler = () => setMobile(window.innerWidth < 480);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return mobile;
+}
+
+/* ─── Sub-components ─────────────────────────────────────────────────── */
 
 function NewsCard({ article }: { article: NewsArticle }) {
   const [hovered, setHovered] = useState(false);
@@ -72,23 +87,39 @@ function LoadingState() {
   );
 }
 
-/* ── Main component ───────────────────────────────────────────────────── */
+/* ─── Main component ─────────────────────────────────────────────────── */
 
-export default function Panel({ country, onClose }: CountryPanelProps) {
-  /* ── Slide animation ──────────────────────────────────────────────── */
+export default function Panel({
+  country,
+  triggerClose,
+  onClose,
+}: CountryPanelProps) {
+  const isMobile = useIsMobile();
+
+  /* ── Slide animation ────────────────────────────────────────────── */
   const [open, setOpen] = useState(false);
 
+  // Slide in on mount
   useEffect(() => {
     const id = requestAnimationFrame(() => setOpen(true));
     return () => cancelAnimationFrame(id);
   }, []);
 
+  // X button: panel drives its own close
   const handleClose = () => {
     setOpen(false);
-    setTimeout(onClose, 350);
+    setTimeout(onClose, SLIDE_DURATION);
   };
 
-  /* ── News fetch ───────────────────────────────────────────────────── */
+  // External trigger (e.g. ocean click): parent asks us to animate out
+  useEffect(() => {
+    if (!triggerClose) return;
+    setOpen(false);
+    const id = setTimeout(onClose, SLIDE_DURATION);
+    return () => clearTimeout(id);
+  }, [triggerClose]);
+
+  /* ── News fetch ─────────────────────────────────────────────────── */
   const [newsState, setNewsState] = useState<NewsState>({ status: "idle" });
   const fetchedForRef = useRef<string | null>(null);
 
@@ -108,27 +139,55 @@ export default function Panel({ country, onClose }: CountryPanelProps) {
       });
   }, [country]);
 
-  /* ── Render ───────────────────────────────────────────────────────── */
+  /* ── Responsive overrides ───────────────────────────────────────── */
+  const headerPadding = isMobile ? "16px 12px 12px" : "28px 20px 20px";
+  const bodyPadding   = isMobile ? "12px" : "20px";
+  const titleSize     = isMobile ? "14px" : "17px";
+  const closeBtnSize  = isMobile ? "32px" : "auto";   // minimum tap target
+
+  /* ── Render ─────────────────────────────────────────────────────── */
   return (
+    /*
+     * Outer: animates width 0 → PANEL_WIDTH.
+     * overflow:hidden clips the fixed-width inner — this is what creates
+     * the slide effect instead of a squash.
+     */
     <div
       style={{
-        width: open ? "40%" : "0px",
+        width: open ? PANEL_WIDTH : "0px",
         minWidth: 0,
         height: "100%",
         overflow: "hidden",
         flexShrink: 0,
-        transition: "width 350ms cubic-bezier(0.22, 1, 0.36, 1)",
+        transition: `width ${SLIDE_DURATION}ms cubic-bezier(0.22, 1, 0.36, 1)`,
       }}
     >
-      <div style={s.inner}>
+      {/* Inner: fixed width so it is clipped, never squashed */}
+      <div style={{ ...s.inner, width: PANEL_WIDTH }}>
 
-        <div style={s.header}>
+        <div style={{ ...s.header, padding: headerPadding }}>
           <div style={s.accent} />
-          <div style={{ flex: 1, minWidth: 0 }}>
+
+          {/* Title block — min-width:0 lets the ellipsis truncation work */}
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
             <div style={s.eyebrow}>REGION SELECTED</div>
-            <h2 style={s.title}>{country}</h2>
+            <h2 style={{ ...s.title, fontSize: titleSize }}>{country}</h2>
           </div>
-          <button onClick={handleClose} style={s.closeBtn} aria-label="Close panel">
+
+          {/*
+           * Close button — explicit minWidth/minHeight guarantees a
+           * reachable tap target on mobile regardless of panel width.
+           */}
+          <button
+            onClick={handleClose}
+            style={{
+              ...s.closeBtn,
+              minWidth: closeBtnSize,
+              minHeight: closeBtnSize,
+              flexShrink: 0,
+            }}
+            aria-label="Close panel"
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
                 d="M1 1L13 13M13 1L1 13"
@@ -142,7 +201,7 @@ export default function Panel({ country, onClose }: CountryPanelProps) {
 
         <div style={s.divider} />
 
-        <div style={s.body}>
+        <div style={{ ...s.body, padding: bodyPadding }}>
           <div style={s.sectionLabel}>LATEST NEWS</div>
 
           {newsState.status === "idle" && (

@@ -33,20 +33,41 @@ import { v2ll } from "./utils";
 
 interface GlobeThreeProps {
   style?: React.CSSProperties;
-  /** Called with a country name when the user clicks a country,
-   *  or with null when they click empty space / deselect. */
+  /**
+   * Called with a country name when the user clicks a country,
+   * or with null when they click ocean / same country again.
+   */
   onCountrySelect?: (name: string | null) => void;
+  /**
+   * Controlled selection driven by the parent (GlobeView).
+   * When this becomes null — e.g. the user closes the panel with the X
+   * button — GlobeThree resets all line materials to clear the highlight.
+   */
+  selectedCountry?: string | null;
 }
 
 /* ── Component ────────────────────────────────────────────────────────── */
 
-export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) {
+export default function GlobeThree({ style, onCountrySelect, selectedCountry }: GlobeThreeProps) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   /* These refs survive re-renders without triggering them */
   const lineMapRef  = useRef<Map<string, THREE.Line[]>>(new Map());
   const featuresRef = useRef<GeoJSON.Feature[]>([]);
   const selectedRef = useRef<string | null>(null);
+
+  /**
+   * External deselect — fires when the parent sets selectedCountry to null
+   * (e.g. X button closes the panel).  Resets all line materials and clears
+   * the internal ref so the next click starts fresh.
+   */
+  useEffect(() => {
+    if (selectedCountry !== null) return;
+    lineMapRef.current.forEach((lines) =>
+      lines.forEach((l) => { l.material = DEFAULT_MAT; })
+    );
+    selectedRef.current = null;
+  }, [selectedCountry]);
 
   useEffect(() => {
     const el = mountRef.current;
@@ -210,11 +231,10 @@ export default function GlobeThree({ style, onCountrySelect }: GlobeThreeProps) 
       const hits = raycaster.intersectObject(hitSphere);
       globeGroup.remove(hitSphere);
 
-      if (!hits.length) {
-        selectedRef.current = null;
-        onCountrySelect?.(null);
-        return;
-      }
+      // Miss = click landed on the canvas but outside the globe sphere
+      // (the dark space around the planet). We intentionally do nothing here
+      // so an open panel is not dismissed by an accidental off-globe click.
+      if (!hits.length) return;
 
       /* Convert hit position to lat/lng and find matching feature */
       const localPt = hits[0].point
