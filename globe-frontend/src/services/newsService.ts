@@ -31,6 +31,8 @@ const BASE_URL = import.meta.env.VITE_FRONTEND_URI || "http://localhost:8000";
 function buildUrl(country: string): string {
   const slug = country.replace(/\s+/g, "_").toLowerCase();
   return `${BASE_URL}/news/?name=world-countries&subname=${encodeURIComponent(slug)}/`;
+  const slug = country.replace(/\s+/g, "_").toLowerCase();
+  return `${BASE_URL}/news/?name=world-countries&subname=${encodeURIComponent(slug)}/`;
 }
 
 /**
