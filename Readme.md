@@ -1,17 +1,17 @@
 # Oversite 🌍 
 
-**Oversite** is a geospatial news discovery engine that replaces the traditional "scroll" with a 3D interactive experience. By mapping global events onto a WebGL-powered globe, Oversite provides a literal "bird's-eye view" of the world's information.
+**Oversite** is a geospatial news discovery engine that enhances the traditional "scroll" with a 3D interactive experience. By mapping global events onto a WebGL-powered globe, Oversite provides a literal "bird's-eye view" of the world's information.
 
 [Live Demo](#) | [Portfolio Site](#)
 
 ---
 
 ## 💡 The Concept
-In an era of information fatigue, **Oversite** offers a spatial perspective. Instead of being fed news by an algorithm, users navigate the planet to discover stories. It is an **over-site** (an overview) of the world’s current **sites** (events).
+In an era of information fatigue, **Oversite** offers a spatial perspective. Instead of being fed news by an algorithm, users navigate around the planet to discover stories. It is an **over-site** (an overview) of the world’s current **sites** (events).
 
 ## 🛠 Tech Stack
 * **Engine:** [Three.js / React Three Fiber] — Rendering the high-performance 3D environment.
-* **Framework:** [React / Next.js] — For a responsive, single-page application architecture.
+* **Framework:** [React] — For a responsive, single-page application architecture.
 * **Data:** [NewsAPI / GNews / custom] — Real-time ingestion of global headlines.
 * **Styling:** Tailwind CSS — Using a "Midnight & Amber" palette for a premium, low-light aesthetic.
 
