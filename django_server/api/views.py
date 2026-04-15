@@ -47,7 +47,7 @@ def news(request):
                 key = ""
             elif name == 'world-countries':
                 countries_name = request.query_params.get('subname')
-                locality = countries_name
+                locality = countries_name.rstrip('/')
                 user = Tag.objects.get(name = name)
                 scope = Scope.objects.get(user_id = user.id, name = locality)
                 post_list = News.objects.filter(feed_id = scope.id)
