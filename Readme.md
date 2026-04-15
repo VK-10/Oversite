@@ -2,7 +2,7 @@
 
 **Oversite** is a geospatial news discovery engine that enhances the traditional "scroll" with a 3D interactive experience. By mapping global events onto a WebGL-powered globe, Oversite provides a literal "bird's-eye view" of the world's information.
 
-[Live Demo](#) | [Portfolio Site](#)
+[Live Demo](oversite-beryl.vercel.app) | [Portfolio Site](#)
 
 ---
 
