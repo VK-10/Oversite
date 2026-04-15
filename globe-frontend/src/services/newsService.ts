@@ -26,11 +26,12 @@
 import type { NewsArticle } from "../types/rss";
 
 /** Change to "http://localhost:8000" if Django runs on a different port */
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = import.meta.env.VITE_BACKEND_URI || "http://localhost:8000";
 
 function buildUrl(country: string): string {
   const slug = country.replace(/\s+/g, "_").toLowerCase();
   return `${BASE_URL}/news/?name=world-countries&subname=${encodeURIComponent(slug)}/`;
+
 }
 
 /**

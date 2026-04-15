@@ -107,7 +107,8 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
 
     /* ── Globe mesh ─────────────────────────────────────────────────── */
     const earthTexture = new THREE.TextureLoader().load(
-      "/src/assets/Whole_world_-_land_and_oceans_12000.jpeg"
+      // "/src/assets/Whole_world_-_land_and_oceans_12000.jpeg" 
+      ""
     );
     globeGroup.add(
       new THREE.Mesh(
