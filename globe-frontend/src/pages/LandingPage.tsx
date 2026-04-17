@@ -1,24 +1,30 @@
-import { Link } from 'react-router-dom'
+import { Link } from "react-router-dom";
 
-const LandingPage = () => {
+export default function LandingPage() {
   return (
-    <div className='relative bg-gradient-to-br from-violet-50 via-white to-purple-50 overflow-hidden'>
-        <div className='max-w-7xl mx-auto px-6 lg:px-8 py-24 lg:py-32 relative'>
-            <div className = "grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-                <header>
-                    OverSite
-                </header>
-                <main>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <Link to={"/globe"} className="">
-                    <span className="group inline-flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-105 transition-all duration-200">Start Exploring the world</span>
-                    </Link>
-                </div>
-                </main>
-            </div>
-        </div>
-    </div>
-  )
-}
+    <div style={{ minHeight: "100vh", background: "#070b10", color: "#f8fafc", padding: "48px" }}>
+      <h1 style={{ fontSize: "48px", fontWeight: 300, marginBottom: "16px" }}>
+        The world's events, mapped and live
+      </h1>
 
-export default LandingPage
+      <p style={{ maxWidth: "560px", lineHeight: 1.7, color: "rgba(248,250,252,0.65)", marginBottom: "24px" }}>
+        Click any country on the globe to surface curated news, regional signals, and geopolitical context.
+      </p>
+
+      <Link
+        to="/globe"
+        style={{
+          display: "inline-block",
+          padding: "12px 20px",
+          borderRadius: "10px",
+          background: "#a5f3c9",
+          color: "#070b10",
+          textDecoration: "none",
+          fontWeight: 500,
+        }}
+      >
+        Explore the globe
+      </Link>
+    </div>
+  );
+}
