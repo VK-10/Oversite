@@ -21,10 +21,6 @@ def clean_post(post):
         "feed": post["feed"],
     }
 
-def countries_map(country):
-    
-    from rapidfuzz import process
-
 def countries_map(country: str):
     if not country:
         return None
