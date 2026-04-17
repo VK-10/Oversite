@@ -34,8 +34,14 @@ def news(request):
                 key = ""
             elif name == 'world-countries':
                 countries_name = request.query_params.get('subname')
+                print("RAW SUBNAME:", repr(countries_name))
                 locality = countries_name.rstrip('/')
+                print("AFTER STRIP:", repr(locality))
                 locality = countries_map(locality)
+                print("AFTER MAP:", repr(locality))
+                # countries_name = request.query_params.get('subname')
+                # locality = countries_name.rstrip('/')
+                # locality = countries_map(locality)
                 user = Tag.objects.get(name = name)
                 scope = Scope.objects.filter(user_id=user.id, name=locality).first()
 
@@ -44,7 +50,7 @@ def news(request):
                         {"error": f"Scope not found: {locality}"},
                         status=404
                     )
-                    
+
                 post_list = News.objects.filter(feed_id = scope.id)
 
                 posts = ApiNewsSerializers(post_list, many = True)
