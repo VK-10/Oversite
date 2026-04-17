@@ -61,6 +61,7 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
    * (e.g. X button closes the panel).  Resets all line materials and clears
    * the internal ref so the next click starts fresh.
    */
+  
   useEffect(() => {
     if (selectedCountry !== null) return;
     lineMapRef.current.forEach((lines) =>
@@ -73,6 +74,9 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     const el = mountRef.current;
     if (!el) return;
 
+    document.body.style.overflow = "hidden"; // Stops the "scroll ruins camera" issue
+    window.scrollTo(0, 0);                   // Resets any landing page scroll
+    
     /* ── Renderer ──────────────────────────────────────────────────── */
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -171,6 +175,16 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     const vel = { x: 0, y: 0 };
     let pm    = { x: 0, y: 0 };
 
+    /* pinchDist holds the pixel distance between two touch points from
+     * the previous touchmove frame. null = not currently pinching.     */
+    let pinchDist: number | null = null;
+
+    const getTouchDist = (e: TouchEvent): number => {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
     const xy = (e: MouseEvent | TouchEvent) => ({
       x: (e as MouseEvent).clientX
         ?? (e as TouchEvent).touches?.[0]?.clientX
@@ -181,31 +195,57 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     });
 
     const onDown = (e: MouseEvent | TouchEvent) => {
+      /* Ignore multi-touch starts — pinch is handled entirely in onMove */
+      if ((e as TouchEvent).touches && (e as TouchEvent).touches.length > 1) return;
       drag = true; auto = false; didDrag = false;
       pm = xy(e); vel.x = vel.y = 0;
     };
 
     const onUp = () => {
-      if (!drag) return;
+      if (!drag && pinchDist === null) return;
       drag = false;
+      pinchDist = null; // clear pinch state on any finger-lift
       setTimeout(() => { if (!drag) auto = true; }, 3_000);
     };
 
     const onMove = (e: MouseEvent | TouchEvent) => {
+      const te = e as TouchEvent;
+
+      /* ── Two-finger pinch → zoom camera ──────────────────────────── */
+      if (te.touches && te.touches.length === 2) {
+        /* preventDefault stops the browser applying its own native page-zoom. */
+        e.preventDefault();
+        const dist = getTouchDist(te);
+        if (pinchDist !== null) {
+          /* pinchDist > dist → fingers closer   → zoom out (camera back)
+             pinchDist < dist → fingers spreading → zoom in  (camera fwd) */
+          const delta = pinchDist - dist;
+          camera.position.z = Math.max(1.8, Math.min(6.0, camera.position.z + delta * 0.012));
+          auto = false;
+          setTimeout(() => { if (!drag) auto = true; }, 3_000);
+        }
+        pinchDist = dist;
+        return; // do not fall through to single-finger rotation
+      }
+
+      /* ── Single finger → rotate globe ───────────────────────────── */
+      pinchDist = null; // dropped back to one finger — reset pinch tracking
       if (!drag) return;
       const p  = xy(e);
       const dx = p.x - pm.x;
       const dy = p.y - pm.y;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag = true;
-      vel.y = dx * 0.006;
-      vel.x = dy * 0.006;
+
+      const sensitivityFactor = Math.pow(camera.position.z / 3.5, 1.2);
+      vel.y = dx * 0.005 * sensitivityFactor;
+      vel.x = dy * 0.005 * sensitivityFactor;
       pm = p;
     };
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const zoomSpeed   = 0.0015;
-      const minDistance = 1.5;
+      const minDistance = 1.8;
       const maxDistance = 6.0;
       camera.position.z = Math.max(
         minDistance,
@@ -283,7 +323,7 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     el.addEventListener("mousedown",  onDown as EventListener);
     el.addEventListener("mousemove",  onMove as EventListener);
     el.addEventListener("touchstart", onDown as EventListener, { passive: true });
-    el.addEventListener("touchmove",  onMove as EventListener, { passive: true });
+    el.addEventListener("touchmove",  onMove as EventListener, { passive: false });
     el.addEventListener("click",      onClick);
     el.addEventListener("wheel",      onWheel as EventListener, { passive: false });
     window.addEventListener("mouseup",  onUp);
@@ -343,8 +383,9 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
         position: "absolute",
         inset: 0,
         width: "100%",
-        height: "100%",
+        height: "100dvh",
         cursor: "grab",
+        touchAction: "none",
         ...style,
       }}
     />
