@@ -23,7 +23,24 @@ def clean_post(post):
 
 def countries_map(country):
     
-    result = process.extractOne(country, countries_list)
-    print(result)
-    return result[0]
+    from rapidfuzz import process
 
+def countries_map(country: str):
+    if not country:
+        return None
+
+    country = country.strip().replace('_', ' ').lower()
+
+    result = process.extractOne(country, countries_list)
+
+    if not result:
+        return None
+
+    match, score, _ = result
+    print("FUZZ RESULT:", match, score)
+
+    # enforce threshold
+    if score < 80:
+        return None
+
+    return match.lower()
