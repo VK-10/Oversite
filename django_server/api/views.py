@@ -8,24 +8,11 @@ from django.http import HttpResponse
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser 
 from api.models import News
-from bs4 import BeautifulSoup
+from api.utils import clean_post
 from rest_framework.decorators import api_view
+from api.utils import countries_map
 # Create your views here.
 
-def clean_post(post):
-    description = ""
-    if post.get("description"):
-        soup = BeautifulSoup(post["description"], "html.parser")
-        description = soup.get_text().strip()
-
-    return {
-        "id": post["id"],
-        "title": post["title"],
-        "description": description,
-        "published_at": post["published_at"],  # leave as is for now
-        "url": post["url"],
-        "feed": post["feed"],
-    }
 
 # @cache_page(60 * 10)
 @api_view(['GET'])
@@ -48,6 +35,7 @@ def news(request):
             elif name == 'world-countries':
                 countries_name = request.query_params.get('subname')
                 locality = countries_name.rstrip('/')
+                locality = countries_map(locality)
                 user = Tag.objects.get(name = name)
                 scope = Scope.objects.get(user_id = user.id, name = locality)
                 post_list = News.objects.filter(feed_id = scope.id)
