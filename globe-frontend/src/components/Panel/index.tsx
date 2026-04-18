@@ -4,7 +4,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { NewsArticle, NewsState } from "../../types/rss";
-import { fetchCountryNews } from "../../services/newsService";
 import type { CountryPanelProps } from "./types";
 import s from "./styles";
 import { getCountryNews } from "../../repositories/newRepo"
