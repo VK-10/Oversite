@@ -7,6 +7,7 @@ import type { NewsArticle, NewsState } from "../../types/rss";
 import { fetchCountryNews } from "../../services/newsService";
 import type { CountryPanelProps } from "./types";
 import s from "./styles";
+import { getCountryNews } from "../../repositories/newRepo"
 
 /* ─── Constants ──────────────────────────────────────────────────────── */
 
@@ -127,7 +128,7 @@ export default function Panel({
     setNewsState({ status: "loading" });
     fetchedForRef.current = country;
 
-    fetchCountryNews(country)
+    getCountryNews(country) // calling to Repo layer insteas of service
       .then((articles) => {
         if (fetchedForRef.current !== country) return;
         setNewsState({ status: "success", articles });
