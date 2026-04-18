@@ -1,16 +1,16 @@
-function openDB() : Promise<IDBDatabase> {
-    return new Promise((resolve, reject) =? {
-        const request = indexedDB.open("newsDB", 1);
+// function openDB() : Promise<IDBDatabase> {
+//     return new Promise((resolve, reject) =? {
+//         const request = indexedDB.open("newsDB", 1);
 
-        request.onupgradeneeded = () => {
-            const db = request.result;
-            db.createObjectStore("countries", {keyPath: "name"});
-        };
+//         request.onupgradeneeded = () => {
+//             const db = request.result;
+//             db.createObjectStore("countries", {keyPath: "name"});
+//         };
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => resolve(request.error);
-    });
-}
+//         request.onsuccess = () => resolve(request.result);
+//         request.onerror = () => resolve(request.error);
+//     });
+// }
 
 
-export const db = await openDB()
+// export const db = await openDB()
