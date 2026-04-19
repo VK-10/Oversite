@@ -66,6 +66,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
+     "http://localhost:5173",
      "https://oversite-beryl.vercel.app"
 ]
 
@@ -106,8 +107,9 @@ if env("DJANGO_DEBUG") == True:
             'PORT': '5433',
         }
     }
-else:
 
+
+else:
 
     DATABASES = {
       'default': {
