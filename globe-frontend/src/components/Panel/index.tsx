@@ -127,10 +127,14 @@ export default function Panel({
     setNewsState({ status: "loading" });
     fetchedForRef.current = country;
 
-    getCountryNews(country) // calling to Repo layer insteas of service
-      .then((articles) => {
+    getCountryNews(country, (updated) => {
+      if (fetchedForRef.current !== country) return;
+
+      setNewsState({ status : "success", articles: updated })
+    }) // calling to Repo layer insteas of service
+      .then((cached) => {
         if (fetchedForRef.current !== country) return;
-        setNewsState({ status: "success", articles });
+        setNewsState({ status: "success", articles : cached });
       })
       .catch((err: unknown) => {
         if (fetchedForRef.current !== country) return;
