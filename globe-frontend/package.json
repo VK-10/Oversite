@@ -12,6 +12,7 @@
   "dependencies": {
     "@amcharts/amcharts4-geodata": "^4.1.31",
     "@turf/boolean-point-in-polygon": "^7.3.4",
+    "@vercel/analytics": "^2.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^6.30.3",
