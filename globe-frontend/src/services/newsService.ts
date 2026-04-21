@@ -22,7 +22,7 @@
  * The country slug is the GeoJSON name with spaces → underscores,
  * e.g. "United States of America" → "United_States_of_America".
  */
-
+//API Layer
 import type { NewsArticle } from "../types/rss";
 
 /** Change to "http://localhost:8000" if Django runs on a different port */
@@ -55,9 +55,10 @@ interface RawArticle {
   feed: string;
 }
 
-function normalise(raw: RawArticle): NewsArticle {
+function normalise(raw: RawArticle, country: string): NewsArticle {
   return {
     ...raw,
+    country, //injecting for query in indexedDB
     publishedAt: parsePublishedAt(raw.published_at),
   };
 }
@@ -85,5 +86,5 @@ export async function fetchCountryNews(country: string): Promise<NewsArticle[]> 
     throw new Error("Unexpected response format from server (expected an array)");
   }
 
-  return raw.map(normalise);
+  return raw.map(r => normalise(r, country));
 }

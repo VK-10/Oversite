@@ -27,7 +27,7 @@ import os
 import environ
 
 env = environ.Env(
-    DEBUG=(bool, False)
+    DJANGO_DEBUG=(bool, False)
 )
 
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
@@ -116,7 +116,7 @@ else:
         'USER': env('PGUSER'),
         'PASSWORD': env('PGPASSWORD'),
         'HOST': env('PGHOST'),
-        'PORT':  5432,
+        'PORT': env('PGPORT', default=5432),
         'OPTIONS': {
           'sslmode': 'require',
         },

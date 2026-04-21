@@ -16,6 +16,7 @@ export interface NewsArticle {
   feed: string;
   /** Parsed Date derived from published_at — null when date is invalid/sentinel */
   publishedAt: Date | null;
+  country: string; /*added for indexing and querying the indexedDB */
 }
 
 /** Discriminated union used by CountryPanel to track request state */
