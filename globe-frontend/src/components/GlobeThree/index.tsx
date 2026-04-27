@@ -1,15 +1,5 @@
 /**
  * src/components/GlobeThree/index.tsx
- *
- * React wrapper for the interactive Three.js globe.
- *
- * All GLSL shader strings live in  ./shaders.ts
- * All Three.js object builders live in ./builders.ts
- * Coordinate math lives in           ./utils.ts
- *
- * This file is intentionally thin: it owns only the React lifecycle
- * (useEffect / useRef), the renderer setup, the interaction handlers,
- * and the animation loop.
  */
 
 import { useEffect, useRef } from "react";
@@ -25,134 +15,159 @@ import {
   buildGrid,
   buildDots,
   buildBorders,
+  buildCentroidMap,
+  buildLandFill,
   makeStars,
 } from "./builders";
 import { v2ll } from "./utils";
 
-/* ── Props ────────────────────────────────────────────────────────────── */
+/* ── Configuration Constants ────────────────────────────────────────── */
+const minDistance = 1.5;
+const maxDistance = 6.0;
+const zoomSpeed   = 0.0015;
+
+/* ── Globe Layer Stack (Radii) ──────────────────────────────────────── */
+const GLOBE_R      = 1.0;    // Base reference radius
+const OCEAN_R      = 0.998;  // Base navy sphere
+const LAND_R       = 1.002;  // Dark green country fills (fixed Z-fighting)
+const DOTS_R       = 1.001;  // Interactive dot cloud
+const BORDERS_R    = 1.003;  // Green country outlines
+const ATMO_INNER_R = 1.06;   // Tight rim glow
+const ATMO_OUTER_R = 1.22;   // Expansive blue haze
+
 
 interface GlobeThreeProps {
   style?: React.CSSProperties;
-  /**
-   * Called with a country name when the user clicks a country,
-   * or with null when they click ocean / same country again.
-   */
   onCountrySelect?: (name: string | null) => void;
-  /**
-   * Controlled selection driven by the parent (GlobeView).
-   * When this becomes null — e.g. the user closes the panel with the X
-   * button — GlobeThree resets all line materials to clear the highlight.
-   */
   selectedCountry?: string | null;
+  jumpRequest?: { country: string; seq: number } | null;
+  onCountriesLoaded?: (names: string[]) => void;
 }
 
-/* ── Component ────────────────────────────────────────────────────────── */
-
-export default function GlobeThree({ style, onCountrySelect, selectedCountry }: GlobeThreeProps) {
-  const mountRef = useRef<HTMLDivElement>(null);
-
-  /* These refs survive re-renders without triggering them */
+export default function GlobeThree({
+  style,
+  onCountrySelect,
+  selectedCountry,
+  jumpRequest,
+  onCountriesLoaded,
+}: GlobeThreeProps) {
+  const mountRef    = useRef<HTMLDivElement>(null);
   const lineMapRef  = useRef<Map<string, THREE.Line[]>>(new Map());
   const featuresRef = useRef<GeoJSON.Feature[]>([]);
   const selectedRef = useRef<string | null>(null);
+  const centroidMapRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
+  const jumpTargetRef  = useRef<{ rotY: number; rotX: number } | null>(null);
 
-  /**
-   * External deselect — fires when the parent sets selectedCountry to null
-   * (e.g. X button closes the panel).  Resets all line materials and clears
-   * the internal ref so the next click starts fresh.
-   */
-  
+  /* ── External selection / deselection ──────────────────────────────── */
   useEffect(() => {
-    if (selectedCountry !== null) return;
-    lineMapRef.current.forEach((lines) =>
-      lines.forEach((l) => { l.material = DEFAULT_MAT; })
-    );
-    selectedRef.current = null;
+    const lmap = lineMapRef.current;
+    if (selectedCountry === null || selectedCountry === undefined) {
+      lmap.forEach((lines) =>
+        lines.forEach((l) => { l.material = DEFAULT_MAT; })
+      );
+      selectedRef.current = null;
+    } else {
+      lmap.forEach((lines, key) =>
+        lines.forEach((l) => {
+          l.material = key === selectedCountry ? SELECTED_MAT : DIM_MAT;
+        })
+      );
+      selectedRef.current = selectedCountry;
+    }
   }, [selectedCountry]);
 
+  /* ── Jump-to-country ──────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!jumpRequest) return;
+    const centroid = centroidMapRef.current.get(jumpRequest.country);
+    if (!centroid) return;
+    jumpTargetRef.current = {
+      rotY: -(Math.PI / 2 + THREE.MathUtils.degToRad(centroid.lng)),
+      rotX: Math.max(
+        -Math.PI / 2.2,
+        Math.min(Math.PI / 2.2, THREE.MathUtils.degToRad(centroid.lat)),
+      ),
+    };
+  }, [jumpRequest]);
+
+  /* ── Three.js setup ───────────────────────────────────────────────── */
   useEffect(() => {
     const el = mountRef.current;
     if (!el) return;
 
-    document.body.style.overflow = "hidden"; // Stops the "scroll ruins camera" issue
-    window.scrollTo(0, 0);                   // Resets any landing page scroll
-    
-    /* ── Renderer ──────────────────────────────────────────────────── */
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      stencil: true,
-    });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(el.clientWidth, el.clientHeight);
     renderer.setClearColor(0x000000, 0);
     renderer.autoClearStencil = true;
     el.appendChild(renderer.domElement);
 
-    /* ── Scene / camera ─────────────────────────────────────────────── */
     const scene  = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(
-      42,
-      el.clientWidth / el.clientHeight,
-      0.1,
-      200,
-    );
+    const camera = new THREE.PerspectiveCamera(42, el.clientWidth / el.clientHeight, 0.1, 200);
     camera.position.z = 2.7;
 
-    const R = 1.0;
     const globeGroup = new THREE.Group();
     scene.add(globeGroup);
 
-    /* ── Lighting ───────────────────────────────────────────────────── */
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.3);
     sun.position.set(5, 3, 5);
     scene.add(sun);
 
-    /* ── Globe mesh ─────────────────────────────────────────────────── */
-    const earthTexture = new THREE.TextureLoader().load(
-      // "/src/assets/Whole_world_-_land_and_oceans_12000.jpeg" 
-      ""
-    );
+    /* ── Ocean sphere ─────────────────────────────────────────────────
+     * Solid dark navy — the ocean base colour.
+     * Land is rendered on top as a separate filled mesh group (see below)
+     * so the two are visually distinct without any texture file.
+     * Colour pair:
+     *   Ocean : #0a1628  dark navy
+     *   Land  : #0f2318  dark forest green  (set in buildLandFill)
+     */
     globeGroup.add(
       new THREE.Mesh(
-        new THREE.SphereGeometry(R * 0.998, 64, 64),
+        new THREE.SphereGeometry(OCEAN_R, 64, 64),
         new THREE.MeshStandardMaterial({
-          map: earthTexture,
+          color: new THREE.Color(0x0a1628),
           metalness: 0.1,
           roughness: 0.8,
         }),
       )
     );
 
-    /* ── Decorative layers ──────────────────────────────────────────── */
-    globeGroup.add(buildGrid(R));
-    globeGroup.add(buildDots(R * 1.001));
+    globeGroup.add(buildGrid(GLOBE_R));
+    globeGroup.add(buildDots(DOTS_R));
 
-    buildBorders(R * 1.003).then(({ group, lineMap, features }) => {
+    buildBorders(BORDERS_R).then(({ group, lineMap, features }) => {
       globeGroup.add(group);
       lineMapRef.current  = lineMap;
       featuresRef.current = features;
+      centroidMapRef.current = buildCentroidMap(features);
+      onCountriesLoaded?.(Array.from(lineMap.keys()).sort());
+
+      /* Land fill: renders country polygons in dark green at LAND_R,
+       * just above the ocean sphere at R*0.998.                       */
+      globeGroup.add(buildLandFill(features, LAND_R));
+
+      /* Catch-up: if a country was selected before borders loaded, apply now */
+      const sel = selectedRef.current;
+      if (sel) {
+        lineMap.forEach((lines, key) =>
+          lines.forEach((l) => {
+            l.material = key === sel ? SELECTED_MAT : DIM_MAT;
+          })
+        );
+      }
     });
 
-    /* ── Atmosphere glow helper ─────────────────────────────────────── */
     const addAtmo = (
-      r: number,
-      col: number,
-      coeff: number,
-      power: number,
+      r: number, col: number, coeff: number, power: number,
       side: THREE.Side = THREE.BackSide,
     ) => {
       scene.add(
         new THREE.Mesh(
           new THREE.SphereGeometry(r, 64, 64),
           new THREE.ShaderMaterial({
-            vertexShader: ATMO_VERT,
-            fragmentShader: ATMO_FRAG,
-            side,
-            blending: THREE.AdditiveBlending,
-            transparent: true,
-            depthWrite: false,
+            vertexShader: ATMO_VERT, fragmentShader: ATMO_FRAG,
+            side, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
             uniforms: {
               glowColor: { value: new THREE.Color(col) },
               coeff:     { value: coeff },
@@ -162,10 +177,9 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
         )
       );
     };
-    addAtmo(R * 1.22, 0x00ccff, 0.55, 4.2);
-    addAtmo(R * 1.06, 0x00ff88, 0.40, 6.0);
+    addAtmo(ATMO_OUTER_R, 0x00ccff, 0.55, 4.2);
+    addAtmo(ATMO_INNER_R, 0x00ff88, 0.40, 6.0);
 
-    /* ── Stars ──────────────────────────────────────────────────────── */
     scene.add(makeStars());
 
     /* ── Interaction state ──────────────────────────────────────────── */
@@ -175,8 +189,7 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     const vel = { x: 0, y: 0 };
     let pm    = { x: 0, y: 0 };
 
-    /* pinchDist holds the pixel distance between two touch points from
-     * the previous touchmove frame. null = not currently pinching.     */
+    /* Pinch-to-zoom: tracks inter-finger distance between touchmove frames */
     let pinchDist: number | null = null;
 
     const getTouchDist = (e: TouchEvent): number => {
@@ -186,16 +199,13 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     };
 
     const xy = (e: MouseEvent | TouchEvent) => ({
-      x: (e as MouseEvent).clientX
-        ?? (e as TouchEvent).touches?.[0]?.clientX
-        ?? 0,
-      y: (e as MouseEvent).clientY
-        ?? (e as TouchEvent).touches?.[0]?.clientY
-        ?? 0,
+      x: (e as MouseEvent).clientX ?? (e as TouchEvent).touches?.[0]?.clientX ?? 0,
+      y: (e as MouseEvent).clientY ?? (e as TouchEvent).touches?.[0]?.clientY ?? 0,
     });
 
     const onDown = (e: MouseEvent | TouchEvent) => {
-      /* Ignore multi-touch starts — pinch is handled entirely in onMove */
+      jumpTargetRef.current = null; // user takes control; cancel any jump
+      /* Ignore multi-touch starts — pinch is handled in onMove */
       if ((e as TouchEvent).touches && (e as TouchEvent).touches.length > 1) return;
       drag = true; auto = false; didDrag = false;
       pm = xy(e); vel.x = vel.y = 0;
@@ -204,32 +214,29 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     const onUp = () => {
       if (!drag && pinchDist === null) return;
       drag = false;
-      pinchDist = null; // clear pinch state on any finger-lift
+      pinchDist = null;
       setTimeout(() => { if (!drag) auto = true; }, 3_000);
     };
 
     const onMove = (e: MouseEvent | TouchEvent) => {
       const te = e as TouchEvent;
 
-      /* ── Two-finger pinch → zoom camera ──────────────────────────── */
+      /* ── Two-finger pinch → zoom ──────────────────────────────────── */
       if (te.touches && te.touches.length === 2) {
-        /* preventDefault stops the browser applying its own native page-zoom. */
-        e.preventDefault();
+        e.preventDefault(); // block browser native page-zoom
         const dist = getTouchDist(te);
         if (pinchDist !== null) {
-          /* pinchDist > dist → fingers closer   → zoom out (camera back)
-             pinchDist < dist → fingers spreading → zoom in  (camera fwd) */
-          const delta = pinchDist - dist;
-          camera.position.z = Math.max(1.8, Math.min(6.0, camera.position.z + delta * 0.012));
+          const delta = pinchDist - dist; // positive = fingers closer = zoom out
+          camera.position.z = Math.max(minDistance, Math.min(maxDistance, camera.position.z + delta * 0.012));
           auto = false;
           setTimeout(() => { if (!drag) auto = true; }, 3_000);
         }
         pinchDist = dist;
-        return; // do not fall through to single-finger rotation
+        return;
       }
 
-      /* ── Single finger → rotate globe ───────────────────────────── */
-      pinchDist = null; // dropped back to one finger — reset pinch tracking
+      /* ── Single finger → rotate ───────────────────────────────────── */
+      pinchDist = null;
       if (!drag) return;
       const p  = xy(e);
       const dx = p.x - pm.x;
@@ -244,9 +251,6 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const zoomSpeed   = 0.0015;
-      const minDistance = 1.8;
-      const maxDistance = 6.0;
       camera.position.z = Math.max(
         minDistance,
         Math.min(maxDistance, camera.position.z + e.deltaY * zoomSpeed),
@@ -265,18 +269,13 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
 
-      /* Use a temporary sphere for hit-testing */
-      const hitSphere = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 64));
+      const hitSphere = new THREE.Mesh(new THREE.SphereGeometry(GLOBE_R, 64, 64));
       globeGroup.add(hitSphere);
       const hits = raycaster.intersectObject(hitSphere);
       globeGroup.remove(hitSphere);
 
-      // Miss = click landed on the canvas but outside the globe sphere
-      // (the dark space around the planet). We intentionally do nothing here
-      // so an open panel is not dismissed by an accidental off-globe click.
       if (!hits.length) return;
 
-      /* Convert hit position to lat/lng and find matching feature */
       const localPt = hits[0].point
         .clone()
         .applyMatrix4(globeGroup.matrixWorld.clone().invert());
@@ -286,33 +285,23 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
       const found = featuresRef.current.find((f) => {
         try {
           return booleanPointInPolygon(
-            pt,
-            f as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
+            pt, f as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
           );
-        } catch {
-          return false;
-        }
+        } catch { return false; }
       });
 
       const name = (found?.properties?.name as string) ?? null;
       const prev = selectedRef.current;
       const lmap = lineMapRef.current;
 
-      /* Reset all materials first */
-      lmap.forEach((lines) =>
-        lines.forEach((l) => { l.material = DEFAULT_MAT; })
-      );
+      lmap.forEach((lines) => lines.forEach((l) => { l.material = DEFAULT_MAT; }));
 
       if (!name || name === prev) {
-        /* Click same country or empty — deselect */
         selectedRef.current = null;
         onCountrySelect?.(null);
       } else {
-        /* Highlight clicked country, dim all others */
         lmap.forEach((lines, key) =>
-          lines.forEach((l) => {
-            l.material = key === name ? SELECTED_MAT : DIM_MAT;
-          })
+          lines.forEach((l) => { l.material = key === name ? SELECTED_MAT : DIM_MAT; })
         );
         selectedRef.current = name;
         onCountrySelect?.(name);
@@ -320,16 +309,16 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
     };
 
     /* ── Event listeners ────────────────────────────────────────────── */
-    el.addEventListener("mousedown",  onDown as EventListener);
-    el.addEventListener("mousemove",  onMove as EventListener);
-    el.addEventListener("touchstart", onDown as EventListener, { passive: true });
-    el.addEventListener("touchmove",  onMove as EventListener, { passive: false });
+    el.addEventListener("mousedown",  onDown  as EventListener);
+    el.addEventListener("mousemove",  onMove  as EventListener);
+    el.addEventListener("touchstart", onDown  as EventListener, { passive: true });
+    el.addEventListener("touchmove",  onMove  as EventListener, { passive: false }); // non-passive for pinch preventDefault
     el.addEventListener("click",      onClick);
     el.addEventListener("wheel",      onWheel as EventListener, { passive: false });
     window.addEventListener("mouseup",  onUp);
     window.addEventListener("touchend", onUp);
 
-    /* ── Resize observer ────────────────────────────────────────────── */
+    /* ── Resize ─────────────────────────────────────────────────────── */
     const onResize = () => {
       const { clientWidth: w, clientHeight: h } = el;
       camera.aspect = w / h;
@@ -342,9 +331,27 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
 
     /* ── Animation loop ─────────────────────────────────────────────── */
     let animId: number;
+
+    const shortAngleDiff = (from: number, to: number): number =>
+      ((to - from) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+
     const loop = () => {
       animId = requestAnimationFrame(loop);
-      if (auto) {
+
+      if (jumpTargetRef.current) {
+        auto = false;
+        const { rotY, rotX } = jumpTargetRef.current;
+        const dY = shortAngleDiff(globeGroup.rotation.y, rotY);
+        const dX = rotX - globeGroup.rotation.x;
+        globeGroup.rotation.y += dY * 0.08;
+        globeGroup.rotation.x += dX * 0.08;
+        if (Math.abs(dY) < 0.004 && Math.abs(dX) < 0.004) {
+          globeGroup.rotation.y = rotY;
+          globeGroup.rotation.x = rotX;
+          jumpTargetRef.current = null;
+          setTimeout(() => { if (!drag) auto = true; }, 3_000);
+        }
+      } else if (auto) {
         globeGroup.rotation.y += 0.001;
       } else {
         globeGroup.rotation.y += vel.y;
@@ -355,6 +362,7 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
         vel.x *= 0.88;
         vel.y *= 0.88;
       }
+
       renderer.render(scene, camera);
     };
     loop();
@@ -365,10 +373,10 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
       resizeObserver.disconnect();
       window.removeEventListener("mouseup",  onUp);
       window.removeEventListener("touchend", onUp);
-      el.removeEventListener("mousedown",  onDown as EventListener);
-      el.removeEventListener("mousemove",  onMove as EventListener);
-      el.removeEventListener("touchstart", onDown as EventListener);
-      el.removeEventListener("touchmove",  onMove as EventListener);
+      el.removeEventListener("mousedown",  onDown  as EventListener);
+      el.removeEventListener("mousemove",  onMove  as EventListener);
+      el.removeEventListener("touchstart", onDown  as EventListener);
+      el.removeEventListener("touchmove",  onMove  as EventListener);
       el.removeEventListener("click",      onClick);
       el.removeEventListener("wheel",      onWheel as EventListener);
       renderer.dispose();
@@ -383,7 +391,7 @@ export default function GlobeThree({ style, onCountrySelect, selectedCountry }: 
         position: "absolute",
         inset: 0,
         width: "100%",
-        height: "100dvh",
+        height: "100%",
         cursor: "grab",
         touchAction: "none",
         ...style,
