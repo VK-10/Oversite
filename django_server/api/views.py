@@ -60,3 +60,9 @@ def news(request):
             # print(posts)
             return Response(cleaned)
 
+@api_view(['GET'])
+def health(request):
+    if request.method == 'GET':
+        return Response({
+            "text": "alive"
+})
