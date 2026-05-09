@@ -15,6 +15,25 @@ class News(models.Model):
     url = models.CharField()
     feed = models.ForeignKey('Scope', editable=False, on_delete=models.DO_NOTHING)
 
+    # NLP addition 
+    summary = models.TextField(blank = True, null=True)
+
+    # language = models.CharField(max_length=20,blank=True, null=True)
+
+    processed = models.BooleanField(default=False)
+
+    cluster_id = models.IntegerField(
+        blank=True,
+        null=True
+    )
+
+    embedding_id = models.CharField(
+        max_length = 255,
+        blank=True,
+        null=True
+    )
+
+
     class Meta:
         managed = False
         db_table = "posts"
