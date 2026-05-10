@@ -9,13 +9,13 @@ class News(models.Model):
     title = models.CharField(max_length=255, default = "Untitled")
 
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField()
-    description = models.CharField(max_length = 1000000)
+    updated_at = models.DateTimeField(auto_now=True)
+    description = models.TextField()
     published_at = models.CharField( null = True, blank=True)
     url = models.CharField()
     feed = models.ForeignKey('Scope', editable=False, on_delete=models.DO_NOTHING)
 
-    # NLP addition 
+    # NLP addition for  news summarization and clustering
     summary = models.TextField(blank = True, null=True)
 
     # language = models.CharField(max_length=20,blank=True, null=True)
@@ -35,21 +35,21 @@ class News(models.Model):
 
 
     class Meta:
-        managed = False
+        managed = True
         db_table = "posts"
 
 class Scope(models.Model):
     "{from feeds table can return all feed-id from the specific user-id and channel-name}"
     id = models.UUIDField(primary_key=True, default= uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField()
+    updated_at = models.DateTimeField(auto_now=True)
     name=models.CharField(max_length=100)
     url=models.CharField()
     user=models.ForeignKey('Tag', editable=False, on_delete=models.DO_NOTHING)
     last_fetched_at=models.DateTimeField()
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'feeds'
 
 class Tag(models.Model):
@@ -61,5 +61,5 @@ class Tag(models.Model):
     api_key = models.CharField(max_length = 1000000)
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'users'
