@@ -1,18 +1,20 @@
-import React from 'react'
-import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import type {AgentMessage} from "../types";
 
-const MessageBubble = () => {
-    const navigate = useNavigate();
-    const [content, setContent] = useState("")
-    const [status, setStatus] = useState("idle")
-    const [error, seterror] = useState("")
-    const [role, setRole] = useState("assistant")
+interface MessageBubbleProps {
+    message: AgentMessage
+}
 
-
-    const handleclick = () => navigate("path/to/agent/stream");
+const MessageBubble = ({message}: MessageBubbleProps) => {
   return (
-    <div>MessageBubble</div>
+    <div className={`message-bubble ${message.role}`}>
+        <p> {message.content}</p>
+        {message.status === "streaming" && (
+            <span>...</span>
+        )}
+        {message.status === "error" && (
+            <p>{message.error}</p>
+        )}
+    </div>
   )
 }
 
