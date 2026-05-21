@@ -21,4 +21,23 @@ export interface AgentMessage {
 
 }
 
+export type StreamMessageOptions = {
+    input: string;
+
+    onChunk?: (chunk: unknown) => void;
+
+    onDone?: () => void;
+
+    onError?: (error: Error) => void;
+};
+
+export type StreamAgentOptions = {
+    apiRoute: string,
+    apiData: unknown,
+    signal?: AbortSignal
+    onChunk?: (chunk: unknown) => void
+    onDone?: () => void
+    onError?: (error: Error) => void 
+}
+
 

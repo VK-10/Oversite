@@ -1,21 +1,15 @@
 // connecting to sse
 //parsing chunks
 //emitting updates
-
 //listener
 
-type StreamAgentOptions = {
-    apiRoute: string,
-    apiData: unknown,
+import type { StreamAgentOptions } from "../types";
 
-    onChunk?: (chunk: unknown) => void
-    onDone?: () => void
-    onError?: (error: Error) => void 
-}
 
 export async function streamAgent ({
     apiRoute,
     apiData,
+    signal,
     onChunk,
     onDone,
     onError,
@@ -29,6 +23,8 @@ export async function streamAgent ({
                 "Content-Type" : "application/json",
             },
             body: JSON.stringify(apiData),
+            
+            signal,
         });
 
 
@@ -51,6 +47,7 @@ export async function streamAgent ({
                 buffer += value;
 
                 const parts = buffer.split("\n\n");
+
                 buffer = parts.pop() || "";
 
                 for (const part of parts) {
@@ -65,9 +62,16 @@ export async function streamAgent ({
                     }
                 }  
     
-            }
-        onDone?.(); 
+        }
+
+        if(buffer.trim()) {
+            const line = buffer.replace("data: ", "")
+            const parsed = JSON.parse(line)
+            onChunk?.(parsed)
+        }
     };
+
+    onDone?.(); 
 
     } catch (error) {
         onError?.(error as Error);
