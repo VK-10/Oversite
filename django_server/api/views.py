@@ -1,3 +1,4 @@
+import asyncio
 from django.views.decorators.cache import cache_page
 from api.models import Scope
 from api.models import Tag
@@ -11,6 +12,12 @@ from api.models import News
 from api.utils import clean_post
 from rest_framework.decorators import api_view
 from api.utils import countries_map
+
+import asyncio
+import random
+
+from django.http import StreamingHttpResponse
+
 # Create your views here.
 
 
@@ -60,9 +67,29 @@ def news(request):
             # print(posts)
             return Response(cleaned)
 
+
+async def sse_stream(request):
+    """
+        Sends server-sent events to the client
+    """
+
+    async def event_stream():
+        tests = ["test-1","test-2","test-3","test-4","test-5",]
+        i = 0
+        while True:
+            yield f'data: {tests[i % len(tests)]} {i}\n\n'
+            i += 1
+            await asyncio.sleep(1)
+
+    return StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+
+
+
+
 @api_view(['GET'])
 def health(request):
     if request.method == 'GET':
         return Response({
             "text": "alive"
 })
+

@@ -1,4 +1,7 @@
+import string
 from search_agents.tools import scrape_url, web_search
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
 from .agents import (
     writer_chain,
     critic_chain
@@ -11,23 +14,24 @@ env = environ.Env()
 
 environ.Env.read_env()
 
-def run_research_pipleine(topic: str) -> dict:
+class AgentState(TypedDict) :
+    query : str
+    search_results: list
+    scraped_content: str
+    report: str
+    feedback: str
 
-    state = {}
+
+
+def search_node(state) -> dict:
 
     print("\n"+" ="*50)
     print("step 1 - search agent is working ...")
     print("="*50)
 
 
-    # search_agent = build_search_agent()
-    # search_result = search_agent.invoke({
-    #     "messages" : [("user", f"Find recent, reliable and detailed information about: {topic}")]
-    # })
-    # state["search_results"] = search_result['messages'][-1].content
-
     search_results = web_search.invoke({
-        "query" : topic
+            "query" : state["query"]
         })
 
     state["search_results"] = search_results
@@ -38,34 +42,14 @@ def run_research_pipleine(topic: str) -> dict:
     print("step 2 - Reader agent is scraping top resources ...")
     print("="*50)
 
-    # reader_agent = build_reader_agent()
-    # reader_result = reader_agent.invoke({
-    #     "messages": [("user",
-    #         f"Based on the following search results about '{topic}', "
-    #         f"pick the most relevant URL and scrape it for deeper content.\n\n"
-    #         f"Search Results:\n{state['search_results'][:800]}"
-    #     )]
-    # })
 
-    # searching the best url
-    # Extract first URL from search results
-    # urls = re.findall(
-    #     r'https?://\S+',
-    #     state['search_results']
-    # )
-
-    # if not urls:
-
-    #     print("No URLs found.")
-
-    #     return state
     top_url = state['search_results'][0]['url'] #some changes requires here -> we cant just select the first link to generate report
 
 
     print("\nTop URL selected:")
     print(top_url)
 
-    scraped_content = scrape_url.invoke({"url": top_url})
+    scraped_content = scrape_url.stream({"url": top_url})
 
     state['scraped_content'] = scraped_content
     print("\nscraped content: \n", state['scraped_content'])
@@ -74,20 +58,29 @@ def run_research_pipleine(topic: str) -> dict:
     print("step 3 - Writer is drafting the report ...")
     print("="*50)
 
+    # research_combined = (
+    #     f"SEARCH RESULTS : \n {state['search_results']} \n\n"
+    #     f"DETAILED SCRAPED CONTENT : \n {state['scraped_content']}"
+    # )
+
+    return state
+
+def writer_node(state):
     research_combined = (
         f"SEARCH RESULTS : \n {state['search_results']} \n\n"
         f"DETAILED SCRAPED CONTENT : \n {state['scraped_content']}"
-    )
-
+        )
     state["report"] = writer_chain.invoke({
-        "topic" : topic,
+        "topic" : state["query"],
         "research" : research_combined
     })
 
     print("\n Final Report\n",state['report'])
 
-    #critic report 
+    return state
 
+    #critic report 
+def critic_node(state):
     print("\n"+" ="*50)
     print("step 4 - critic is reviewing the report ")
     print("="*50)
@@ -100,6 +93,25 @@ def run_research_pipleine(topic: str) -> dict:
 
     return state
 
+
+workflow = StateGraph(AgentState)
+workflow.add_node("search", search_node)
+# workflow.add_node("scrape", scrape_node)
+workflow.add_node("write", writer_node)
+workflow.add_node("critic", critic_node)
+
+# Set flow
+workflow.add_edge(START, "search")
+# workflow.add_edge("search", "scrape")
+workflow.add_edge("search", "write")
+workflow.add_edge("write", "critic")
+workflow.add_edge("critic", END)
+
+app = workflow.compile()
+
 # testing
-topic = "The impact of AI on the job market in 2026"
-run_research_pipleine(topic)
+inputs = {"query" :"The impact of AI on the job market in 2026"}
+
+
+async for chunk in app.stream(inputs, stream_mode="messages"):
+    print(chunk)

@@ -44,6 +44,7 @@ ALLOWED_HOSTS = ['oversite-beryl.vercel.app/','127.0.0.1','localhost',"oversite.
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
+    'daphne',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -52,6 +53,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'nlp_app',
+    'django_eventstream',
+    'search_agents'
 ]
 
 MIDDLEWARE = [
@@ -90,6 +93,8 @@ TEMPLATES = [
 
 
 WSGI_APPLICATION = 'config.wsgi.application'
+
+ASGI_APPLICATION = "config.asgi.application"
 
 
 # Database

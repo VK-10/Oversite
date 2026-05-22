@@ -13,7 +13,7 @@ class News(models.Model):
     description = models.TextField()
     published_at = models.CharField( null = True, blank=True)
     url = models.CharField()
-    feed = models.ForeignKey('Scope', editable=False, on_delete=models.DO_NOTHING)
+    feed = models.ForeignKey('Scope', editable=False, on_delete=models.DO_NOTHING, blank=True,null=True)
 
     # NLP addition for  news summarization and clustering
     summary = models.TextField(blank = True, null=True)
@@ -45,7 +45,7 @@ class Scope(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     name=models.CharField(max_length=100)
     url=models.CharField()
-    user=models.ForeignKey('Tag', editable=False, on_delete=models.DO_NOTHING)
+    user=models.ForeignKey('Tag', editable=False, on_delete=models.DO_NOTHING, blank=True,null=True)
     last_fetched_at=models.DateTimeField()
 
     class Meta:
