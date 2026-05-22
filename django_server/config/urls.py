@@ -21,11 +21,13 @@ from api.views import news
 from django.contrib import admin
 from django.urls import path
 import django_eventstream
+from search_agents.views import helper
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('news/', (news)),
     path('health/', (health)),
+    path('helper/', (helper)),
     path('stream/', views.sse_stream, name='sse_stream')
     
 ]

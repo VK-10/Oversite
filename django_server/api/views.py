@@ -12,6 +12,7 @@ from api.models import News
 from api.utils import clean_post
 from rest_framework.decorators import api_view
 from api.utils import countries_map
+from django.views.decorators.csrf import csrf_exempt
 
 import asyncio
 import random

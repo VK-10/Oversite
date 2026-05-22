@@ -14,7 +14,7 @@ environ.Env.read_env()
 
 GOOGLE_API_KEY = env("GEMINI_API_KEY")
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature= 0.1)
+llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature= 0.1, streaming = True)
 
 # first agent : search agent
 def build_search_agent():

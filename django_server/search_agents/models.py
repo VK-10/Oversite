@@ -6,7 +6,7 @@ import uuid
 class QueryModel(models.Model):
 
     class Status(models.TextChoices):
-        Pending = "pending"
+        PENDING = "pending"
         PROCESSING = "processing"
         READY = "ready"
         FAILED = "failed"
@@ -30,7 +30,7 @@ class QueryModel(models.Model):
     status = models.CharField(
         max_length=20,
         choices = Status.choices,
-        default = Status.Pending
+        default = Status.PENDING
     )
 
     class Meta:
