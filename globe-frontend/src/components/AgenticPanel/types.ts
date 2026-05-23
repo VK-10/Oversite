@@ -31,11 +31,30 @@ export type StreamMessageOptions = {
     onError?: (error: Error) => void;
 };
 
+// export type StreamChunk =
+//     | {
+//           type: "token";
+//           source: string;
+//           content: string;
+//       }
+//     | {
+//           type: "node_start";
+//           node: string;
+//       }
+//     | {
+//           type: "done";
+//       };
+
+export type StreamChunk =
+  | { type: "token"; source: string; content: string }  // source: string covers all node names
+  | { type: "node_start"; node: string }
+  | { done: true };
+
 export type StreamAgentOptions = {
     apiRoute: string,
     apiData: unknown,
     signal?: AbortSignal
-    onChunk?: (chunk: unknown) => void
+    onChunk?: (chunk: StreamChunk) => void
     onDone?: () => void
     onError?: (error: Error) => void 
 }
