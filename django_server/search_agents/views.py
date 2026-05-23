@@ -39,16 +39,26 @@ async def helper(request):
                         .get("chunk")
                     )
 
-                    text = getattr(chunk, "content", "")
+                    content = getattr(chunk, "content", "")
 
-                    if text:
-                        payload = {
-                            "type": "token",
-                            "content": text,
-                        }
+                    node = event.get("name")
+
+                    if isinstance(content, list):
+
+                        for item in content:
+
+                            if item.get("type") == "text":
+
+                                text = item.get("text", "")
+
+                                payload = {
+                                    "type": "token",
+                                    "source" : node,
+                                    "content": text,
+                                }
 
 
-                    yield f"data: {json.dumps(payload)}\n\n"
+                                yield f"data: {json.dumps(payload)}\n\n"
 
                 
             yield f"data: {json.dumps({'done': True})}\n\n"

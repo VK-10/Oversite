@@ -7,6 +7,7 @@ from .agents import (
     critic_chain
 )
 import re
+import json
 
 import environ
 
@@ -20,6 +21,7 @@ class AgentState(TypedDict) :
     scraped_content: str
     report: str
     feedback: str
+    context: str
 
 
 
@@ -67,11 +69,11 @@ class AgentState(TypedDict) :
 
 def search_node(state):
 
-    search_results = web_search.invoke({
-        "query": state["query"]
-    })
-
-    top_url = search_results[0]["url"]
+    # search_results = web_search.invoke({
+    #     "query": state["query"]
+    # })
+    context = json.loads(state["context"])  # 👈 parse first
+    top_url = context["article"]["url"] 
 
     scraped_response = scrape_url.invoke({
         "url": top_url
@@ -81,7 +83,7 @@ def search_node(state):
 
     return {
 
-        "search_results": search_results,
+        "search_results": context,
 
         "scraped_content": scraped_text,
     }

@@ -21,6 +21,7 @@ class QueryModel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     query = models.TextField()
+    context = models.TextField(blank=True)
 
     response = models.TextField(
         blank=True,
