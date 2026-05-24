@@ -80,6 +80,7 @@ export default function AgenticPanel({ context, onClose } : AgentPanelProps ) {
         setMessages((prev) => [...prev, userMessage,reportMessage, criticMessage])
 
         setIsLoading(true);
+        const API_BASE = import.meta.env.VITE_BACKEND_URI ?? "http://localhost:8000"
 
         try {
 
@@ -87,7 +88,7 @@ export default function AgenticPanel({ context, onClose } : AgentPanelProps ) {
             // const fakeResponse = "this is a streamed response from the agent";
 
             await streamAgent({
-                apiRoute: "/helper/",
+                apiRoute: `${API_BASE}/helper/`,
                 apiData : {
                     query: input,
                     context: JSON.stringify(context),
