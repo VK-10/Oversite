@@ -80,7 +80,7 @@ export default function AgenticPanel({ context, onClose } : AgentPanelProps ) {
         setMessages((prev) => [...prev, userMessage,reportMessage, criticMessage])
 
         setIsLoading(true);
-        const API_BASE = import.meta.env.VITE_BACKEND_URI ?? "http://localhost:8000"
+        const API_BASE = import.meta.env.VITE_BACKEND_URI || "http://localhost:8000"
 
         try {
 
