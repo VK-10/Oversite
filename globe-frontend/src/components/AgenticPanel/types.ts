@@ -48,7 +48,7 @@ export type StreamMessageOptions = {
 export type StreamChunk =
   | { type: "token"; source: string; content: string }  // source: string covers all node names
   | { type: "node_start"; node: string }
-  | { done: true };
+  | { type: "done"};
 
 export type StreamAgentOptions = {
     apiRoute: string,
