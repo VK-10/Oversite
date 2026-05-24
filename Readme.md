@@ -14,18 +14,21 @@ In an era of information fatigue, **Oversite** offers a spatial perspective. Ins
 * **Framework:** [React] — For a responsive, single-page application architecture.
 * **Data:** [NewsAPI / GNews / custom] — Real-time ingestion of global headlines.
 * **Styling:** Tailwind CSS — Using a "Midnight & Amber" palette for a premium, low-light aesthetic.
+* **AI:** [LangGraph / Google Gemini] — Agentic pipeline for deep-dive research and analysis.
 
 ## 🚀 Key Technical Features
 * **Geospatial Mapping:** Logic to convert latitude/longitude coordinates from news metadata into 3D Cartesian coordinates ($x, y, z$) on a sphere.
 * **Interactive Camera:** Custom orbit controls allowing for seamless rotation, zoom, and "point-of-interest" snapping.
 * **Data Clustering:** Smart grouping of news pins to prevent UI clutter in high-density regions like Europe or North America.
 * **Real-time Beacons:** Animated shaders to represent "breaking" stories with a pulsing visual effect.
+* **Agentic AI Research Panel:** Click any news article to launch an AI agent — similar to Oversite's DeepSearch — that scrapes the article, writes a structured research report, and runs a critic pass to score and improve it. Streams results token-by-token in real time.
 
 ## 🏗️ Architecture
 1.  **Ingestion:** Fetches headlines from multiple global providers.
 2.  **Geocoding:** Translates country/city metadata into coordinate vectors.
 3.  **Rendering:** Passes data to the 3D layer to instantiate news "nodes" on the globe.
 4.  **Interaction:** Raycasting allows users to click 3D objects to trigger 2D UI news modals.
+5.  **Agentic Pipeline:** A LangGraph graph with a `search` node (scrapes the article URL), a `write` node (generates a research report via Gemini), and a `critic` node (scores and critiques the report) — all streamed over SSE from a Django backend.
 
 ## 📖 How to Run
 1.  **Clone:** `git clone git@github.com:VK-10/Oversite.git`
