@@ -112,7 +112,6 @@ export default function Panel({
   country,
   triggerClose,
   onClose,
-  // onContextChange,
   onOpenAgent,
 }: CountryPanelProps) {
   const isMobile = useIsMobile();
