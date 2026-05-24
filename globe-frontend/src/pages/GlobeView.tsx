@@ -12,6 +12,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import GlobeThree from "../components/GlobeThree";
 import Panel      from "../components/Panel";
 import SearchBar  from "../components/SearchBar";
+import AgenticPanel from "../components/AgenticPanel";
+import type { NewsArticle } from "../types/rss";
 
 function toSlug(name: string): string {
   return name.replace(/\s+/g, "").replace(/[^a-zA-Z0-9]/g, "");
@@ -27,6 +29,12 @@ export default function GlobeView() {
   const [closingPanel,    setClosingPanel]    = useState(false);
   const [countryNames,    setCountryNames]    = useState<string[]>([]);
   const [jumpRequest,     setJumpRequest]     = useState<{ country: string; seq: number } | null>(null);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentContext, setAgentContext] = useState<{
+    selectedCountry? : string | null;
+    article?: NewsArticle
+  }>({});
+  
   const jumpSeq = useRef(0);
 
   const handleCountrySelect = useCallback((name: string | null) => {
@@ -51,6 +59,12 @@ export default function GlobeView() {
     setJumpRequest({ country: name, seq: ++jumpSeq.current });
   }, [handleCountrySelect]);
 
+  const handleOpenAgentWithArticle = (article:NewsArticle)=> {
+    setAgentContext({ selectedCountry, article});
+    setAgentOpen(true);
+
+  }
+
   useEffect(() => {
     const onPopState = (e: PopStateEvent) => {
       const country = (e.state as { country?: string })?.country ?? null;
@@ -60,6 +74,11 @@ export default function GlobeView() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  // Update when country changes
+  useEffect(() => {
+    setAgentContext(prev => ({ ...prev, selectedCountry }));
+  }, [selectedCountry]);
 
   const panelOpen = !!selectedCountry;
 
@@ -78,6 +97,8 @@ export default function GlobeView() {
           country={selectedCountry}
           triggerClose={closingPanel}
           onClose={handlePanelClose}
+          // onContextChange={handleOpenAgentWithArticle},
+          onOpenAgent={handleOpenAgentWithArticle}
         />
       )}
 
@@ -95,6 +116,27 @@ export default function GlobeView() {
           jumpRequest={jumpRequest}
           onCountriesLoaded={setCountryNames}
         />
+
+        {/* AGENT BUTTON */}
+      <button
+        onClick={() => setAgentOpen(prev => !prev)}
+        style={{
+          position: "absolute",
+          bottom: 24,
+          right: 24,
+          zIndex: 20,
+        }}
+      >
+        Agent
+      </button>
+
+      {/* RIGHT AGENT PANEL */}
+      {agentOpen && (
+        <AgenticPanel
+          context={agentContext}
+        />
+      )}
+
       </div>
     </div>
   );

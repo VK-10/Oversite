@@ -3,5 +3,20 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(
+    
+  )],
+
+  server: {
+    proxy: {
+      "/news": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/helper": {           // 👈 add this
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+},
 })

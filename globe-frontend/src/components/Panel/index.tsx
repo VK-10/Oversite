@@ -44,28 +44,47 @@ function useIsMobile(): boolean {
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
 
-function NewsCard({ article }: { article: NewsArticle }) {
+
+function NewsCard({ article, onOpenAgent }: { article: NewsArticle; onOpenAgent?: (a: NewsArticle) => void }) {
   const [hovered, setHovered] = useState(false);
 
-  return (
-    <a
-      href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ ...s.newsCard, ...(hovered ? s.newsCardHover : {}) }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <p style={s.newsTitle}>{article.title}</p>
 
-      {article.description && article.description !== article.title && (
-        <p style={s.newsDesc}>{article.description}</p>
-      )}
 
-      {article.publishedAt && (
-        <span style={s.newsDate}>{formatDate(article.publishedAt)}</span>
-      )}
-    </a>
+   return (
+    <div style={{ position: "relative" }}>
+      <a
+        href={article.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ ...s.newsCard, ...(hovered ? s.newsCardHover : {}) }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <p style={s.newsTitle}>{article.title}</p>
+        {article.description && article.description !== article.title && (
+          <p style={s.newsDesc}>{article.description}</p>
+        )}
+        {article.publishedAt && (
+          <span style={s.newsDate}>{formatDate(article.publishedAt)}</span>
+        )}
+      </a>
+
+      {/* Agent button */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();   // don't follow the <a> link
+          e.stopPropagation();  // don't bubble to card
+          onOpenAgent?.(article);
+        }}
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+        }}
+      >
+        ✦
+      </button>
+    </div>
   );
 }
 
@@ -93,6 +112,7 @@ export default function Panel({
   country,
   triggerClose,
   onClose,
+  onOpenAgent,
 }: CountryPanelProps) {
   const isMobile = useIsMobile();
 
@@ -111,6 +131,10 @@ export default function Panel({
     setTimeout(onClose, SLIDE_DURATION);
   };
 
+  // when article is clicked/hovevred, bubble it up
+  // const handleArticleFocus = (article: NewsArticle) => {
+  //   onContextChange?.({article, country})
+  // }
   // External trigger (e.g. ocean click): parent asks us to animate out
   useEffect(() => {
     if (!triggerClose) return;
@@ -220,7 +244,7 @@ export default function Panel({
             newsState.articles.length === 0
               ? <p style={s.feedbackText}>No news articles found.</p>
               : newsState.articles.map((article) => (
-                  <NewsCard key={article.id} article={article} />
+                  <NewsCard key={article.id} article={article} onOpenAgent={onOpenAgent} />
                 ))
           )}
         </div>

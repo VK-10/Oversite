@@ -2,6 +2,9 @@
  * src/components/CountryPanel/types.ts
  */
 
+import type { NewsArticle } from "../../types/rss";
+
+
 export interface CountryPanelProps {
   /**
    * Raw country name as returned by GlobeThree's onCountrySelect callback,
@@ -19,5 +22,8 @@ export interface CountryPanelProps {
   triggerClose?: boolean;
 
   /** Called once the slide-out animation finishes so the parent can unmount. */
+
+  // onContextChange? : (ctx:{ country? : string; articles: NewsArticle[];}) => void
+  onOpenAgent?: (article: NewsArticle) => void;
   onClose: () => void;
 }
