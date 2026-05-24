@@ -129,7 +129,7 @@ export default function AgenticPanel({ context, onClose } : AgentPanelProps ) {
                         setToolStatus(parsed.node)
                     }
 
-                    if ("done" in parsed && parsed.type === "done") {
+                    if ("done" in parsed && parsed.done === true) {
                         setMessages(prev => 
                             prev.map(msg => 
                                 msg.id === reportId || msg.id === criticId

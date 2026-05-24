@@ -155,7 +155,6 @@ export default function Panel({
       .then((articles) => {
         if (fetchedForRef.current !== country) return;
         setNewsState({ status: "success", articles });
-        // onContextChange?.({ country, articles });
       })
       .catch((err: unknown) => {
         if (fetchedForRef.current !== country) return;
