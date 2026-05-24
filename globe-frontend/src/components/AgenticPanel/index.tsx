@@ -96,7 +96,7 @@ export default function AgenticPanel({ context, onClose } : AgentPanelProps ) {
 
                 onChunk(parsed : StreamChunk) {
                     console.log(parsed);
-                    if (parsed.type === "token") {
+                    if ("type" in parsed && parsed.type === "token") {
                             const source = parsed.source;
                             const targetId = source === "critic" ? criticId : reportId; // default to report
 
@@ -108,7 +108,7 @@ export default function AgenticPanel({ context, onClose } : AgentPanelProps ) {
                                 )
                             );
                         } 
-                    if (parsed.type === "token" && parsed.source === "critic") {
+                    if ("type" in parsed && parsed.type === "token" && parsed.source === "critic") {
                         const token = parsed.content;
 
                         setMessages(prev => 
@@ -124,12 +124,12 @@ export default function AgenticPanel({ context, onClose } : AgentPanelProps ) {
                         ); 
                     }
 
-                    if (parsed.type === "node_start") {
+                    if ("type" in parsed && parsed.type === "node_start") {
 
                         setToolStatus(parsed.node)
                     }
 
-                    if (parsed.type === "done") {
+                    if ("done" in parsed && parsed.type === "done") {
                         setMessages(prev => 
                             prev.map(msg => 
                                 msg.id === reportId || msg.id === criticId
