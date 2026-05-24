@@ -112,7 +112,7 @@ export default function Panel({
   country,
   triggerClose,
   onClose,
-  onContextChange,
+  // onContextChange,
   onOpenAgent,
 }: CountryPanelProps) {
   const isMobile = useIsMobile();
@@ -156,7 +156,7 @@ export default function Panel({
       .then((articles) => {
         if (fetchedForRef.current !== country) return;
         setNewsState({ status: "success", articles });
-        onContextChange?.({ country, articles });
+        // onContextChange?.({ country, articles });
       })
       .catch((err: unknown) => {
         if (fetchedForRef.current !== country) return;
