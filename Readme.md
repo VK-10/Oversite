@@ -41,6 +41,7 @@ In an era of information fatigue, **Oversite** offers a spatial perspective. Ins
 - [ ] **Timeline Slider:** Scrub through the last 24 hours of news to see how stories spread across the map.
 - [ ] **Sentiment Heatmap:** Color-coding the globe based on the emotional tone of local headlines.
 - [ ] **Language Translation:** Auto-translate local news pins into English via LLM integration.
+- [ ] **Trained On Local GeoPolitical Hotspots**  based on the research wotk on https://research.google/blog/protecting-cities-with-ai-driven-flash-flood-forecasting/
 
 ---
 Developed by Vishwajeet Prasad and Gautam Sharma – *Connecting the dots, globally.*
